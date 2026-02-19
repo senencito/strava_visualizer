@@ -43,6 +43,45 @@
 .btn-sync.syncing { opacity: 0.6; pointer-events: none; }
 .btn-logout { font-family: var(--mono); font-size: 10px; padding: 6px 12px; border-radius: 8px; border: none; background: transparent; cursor: pointer; color: var(--ink-muted); text-decoration: underline; text-underline-offset: 3px; }
 .sync-msg { font-family: var(--mono); font-size: 10px; color: var(--accent); margin-left: 4px; }
+.strava-footer {
+  width: 100%; text-align: center; padding: 28px 0 env(safe-area-inset-bottom, 12px);
+  margin-top: auto; display: flex; align-items: center; justify-content: center;
+  gap: 8px; font-family: var(--mono); font-size: 10px; color: var(--ink-muted);
+  letter-spacing: 0.06em; border-top: 1px solid var(--grid);
+}
+.strava-footer img { height: 18px; opacity: 0.5; }
+/* Analytics screen */
+#analytics-screen {
+  display: none; flex-direction: column; width: 100%; max-width: 980px;
+}
+.analytics-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+.analytics-nav h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; flex: 1; }
+.analytics-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filter-label { font-family: var(--mono); font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.filter-select { font-family: var(--mono); font-size: 11px; padding: 6px 10px; border: 1.5px solid var(--grid); border-radius: 8px; background: var(--bg); color: var(--ink); outline: none; cursor: pointer; }
+.filter-select:focus { border-color: var(--accent); }
+.analytics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+@media (max-width: 700px) { .analytics-grid { grid-template-columns: 1fr; } }
+.stat-card { background: var(--surface); border-radius: 16px; padding: 22px 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04); }
+.stat-card-title { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-muted); margin-bottom: 12px; }
+.stat-main { font-size: 32px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 16px; line-height: 1; }
+.stat-main span { font-size: 14px; font-weight: 400; color: var(--ink-muted); margin-left: 4px; }
+.stat-comparisons { display: flex; flex-direction: column; gap: 8px; }
+.stat-comp-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.stat-comp-label { color: var(--ink-muted); font-family: var(--mono); font-size: 10px; }
+.stat-comp-val { font-family: var(--mono); font-size: 12px; font-weight: 500; }
+.stat-delta { font-family: var(--mono); font-size: 10px; padding: 2px 6px; border-radius: 5px; margin-left: 6px; }
+.delta-pos { background: #f0fdf4; color: #16a34a; }
+.delta-neg { background: #fef2f2; color: #dc2626; }
+.delta-neu { background: var(--bg); color: var(--ink-muted); }
+.stat-bar-wrap { margin-top: 8px; }
+.stat-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; font-family: var(--mono); }
+.stat-bar-lbl { width: 80px; color: var(--ink-muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-bar-track { flex: 1; height: 6px; background: var(--grid); border-radius: 3px; overflow: hidden; }
+.stat-bar-fill { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.6s ease; }
+.stat-bar-val { width: 52px; text-align: right; color: var(--ink); font-size: 10px; }
+.analytics-shoe-note { font-family: var(--mono); font-size: 10px; color: var(--ink-muted); margin-top: 4px; }
+.no-data-msg { color: var(--ink-muted); font-size: 13px; padding: 8px 0; font-family: var(--mono); }
 body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; min-height: -webkit-fill-available; display: flex; flex-direction: column; align-items: center; padding: 40px 24px 80px; padding-top: max(40px, env(safe-area-inset-top)); padding-bottom: max(80px, env(safe-area-inset-bottom)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
 html { height: -webkit-fill-available; }
 
@@ -211,6 +250,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
   </div>
   <div class="nav-user">
     <span id="sync-msg" class="sync-msg" style="display:none"></span>
+    <button class="btn-sync" id="btn-analytics" onclick="showAnalytics()" style="display:none">📊 Analytics</button>
     <button class="btn-sync" id="btn-sync" onclick="doSync()">↻ Sync</button>
     <img id="nav-avatar" class="nav-avatar" src="" style="display:none">
     <span id="nav-name" class="nav-name"></span>
@@ -245,6 +285,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
   </div>
   <div id="load-streams" class="loading-msg" style="display:none"><div class="spinner"></div>Loading GPS streams…</div>
   <div class="err" id="picker-err"></div>
+  <footer class="strava-footer">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/c/cb/Strava_Logo.svg" alt="Strava">
+    Powered by Strava
+  </footer>
 </div>
 
 <!-- VIZ -->
@@ -301,6 +345,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
     <div id="ae-bars"></div>
   </div>
   <button class="back-link" style="margin-top:14px" onclick="showScreen('picker')">← Back to activities</button>
+  <footer class="strava-footer" style="margin-top:16px">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/c/cb/Strava_Logo.svg" alt="Strava">
+    Powered by Strava
+  </footer>
 </div>
 
 <div class="tip" id="tip">
@@ -325,6 +373,62 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
     <svg id="trend-svg" style="width:100%;height:260px"></svg>
   </div>
   <div id="trend-list" style="margin-top:12px;display:flex;flex-direction:column;gap:6px"></div>
+  <footer class="strava-footer">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/c/cb/Strava_Logo.svg" alt="Strava">
+    Powered by Strava
+  </footer>
+</div>
+
+<!-- ANALYTICS -->
+<div id="analytics-screen">
+  <div class="analytics-nav">
+    <button class="trend-back" onclick="showScreen('picker')">← Back</button>
+    <h2>Analytics</h2>
+    <div class="analytics-filters">
+      <span class="filter-label">Distance</span>
+      <select class="filter-select" id="af-dist" onchange="renderAnalytics()">
+        <option value="all">All runs</option>
+        <option value="5k">5K</option>
+        <option value="10k">10K</option>
+        <option value="10mi">10 Miles</option>
+        <option value="half" selected>Half Marathon</option>
+      </select>
+      <span class="filter-label">Shoe</span>
+      <select class="filter-select" id="af-shoe" onchange="renderAnalytics()">
+        <option value="all">All shoes</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="analytics-grid">
+    <div class="stat-card" id="ac-ae">
+      <div class="stat-card-title">⚡ Aerobic Efficiency</div>
+      <div class="stat-main" id="ac-ae-main">—</div>
+      <div class="stat-comparisons" id="ac-ae-comps"></div>
+    </div>
+    <div class="stat-card" id="ac-thresh">
+      <div class="stat-card-title">🔥 Threshold Pace</div>
+      <div class="stat-main" id="ac-thresh-main">—</div>
+      <div class="analytics-shoe-note" style="margin-bottom:10px;font-size:9px">Avg pace at HR &gt; 88% max</div>
+      <div class="stat-comparisons" id="ac-thresh-comps"></div>
+    </div>
+    <div class="stat-card" id="ac-speed">
+      <div class="stat-card-title">💨 Average Speed</div>
+      <div class="stat-main" id="ac-speed-main">—</div>
+      <div class="stat-comparisons" id="ac-speed-comps"></div>
+    </div>
+  </div>
+
+  <!-- Per-shoe breakdown -->
+  <div class="stat-card" id="ac-shoes-card" style="display:none">
+    <div class="stat-card-title">👟 Performance by Shoe</div>
+    <div id="ac-shoes-bars"></div>
+  </div>
+
+  <footer class="strava-footer" style="margin-top:24px">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/c/cb/Strava_Logo.svg" alt="Strava">
+    Powered by Strava
+  </footer>
 </div>
 
 <div id="dbg"></div>
@@ -342,7 +446,7 @@ const S = {
 };
 
 function showScreen(n) {
-  ['picker','viz','trend'].forEach(s => { const el=document.getElementById(s+'-screen'); if(el) el.style.display='none'; });
+  ['picker','viz','trend','analytics'].forEach(s => { const el=document.getElementById(s+'-screen'); if(el) el.style.display='none'; });
   document.getElementById(n+'-screen').style.display='flex';
 }
 function setDist(btn) {
@@ -942,6 +1046,189 @@ function renderAEBars(){
     </div>`).join('');
 }
 
+
+// ── ANALYTICS ────────────────────────────────────────────────────────────────
+
+const DIST_RANGES = {
+  all:  [0,       999999],
+  '5k': [4000,    6500],
+  '10k':[8500,    12000],
+  '10mi':[14500,  18000],
+  half: [18000,   24000],
+};
+
+function showAnalytics() {
+  showScreen('analytics');
+  populateShoeFilter();
+  renderAnalytics();
+}
+
+function populateShoeFilter() {
+  const sel = document.getElementById('af-shoe');
+  // Collect unique shoes from all activities
+  const shoes = new Map();
+  S.activities.forEach(a => {
+    if (a.gear_id && a.gear_name) shoes.set(a.gear_id, a.gear_name);
+  });
+  // Clear except "All shoes"
+  while (sel.options.length > 1) sel.remove(1);
+  shoes.forEach((name, id) => {
+    const opt = document.createElement('option');
+    opt.value = id; opt.textContent = '👟 ' + name;
+    sel.appendChild(opt);
+  });
+}
+
+function filterActivitiesForAnalytics() {
+  const distKey = document.getElementById('af-dist').value;
+  const shoeId  = document.getElementById('af-shoe').value;
+  const [dMin, dMax] = DIST_RANGES[distKey] || DIST_RANGES.all;
+
+  return S.activities.filter(a => {
+    const isRun = ['Run','VirtualRun','TrailRun'].includes(a.type||'Run') ||
+                  (a.sport_type||'').toLowerCase().includes('run');
+    const distOk = a.distance >= dMin && a.distance <= dMax;
+    const shoeOk = shoeId === 'all' || a.gear_id === shoeId;
+    return isRun && distOk && shoeOk;
+  });
+}
+
+function bucketByPeriod(acts) {
+  const now = new Date();
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const threeMonthsAgo = new Date(now); threeMonthsAgo.setMonth(now.getMonth() - 3);
+  const oneYearAgo     = new Date(now); oneYearAgo.setFullYear(now.getFullYear() - 1);
+
+  return {
+    thisMonth:    acts.filter(a => new Date(a.start_date_local) >= thisMonthStart),
+    last3Months:  acts.filter(a => {
+      const d = new Date(a.start_date_local);
+      return d >= threeMonthsAgo && d < thisMonthStart;
+    }),
+    lastYear:     acts.filter(a => {
+      const d = new Date(a.start_date_local);
+      return d >= oneYearAgo && d < thisMonthStart;
+    }),
+  };
+}
+
+function avg(arr) {
+  const valid = arr.filter(v => v != null && !isNaN(v) && v > 0);
+  return valid.length ? valid.reduce((a,b)=>a+b,0)/valid.length : null;
+}
+
+function fmtAE(v)    { return v ? parseFloat(v).toFixed(2) : '—'; }
+function fmtSpeed(v) { return v ? (v * 2.23694).toFixed(2) : '—'; } // m/s → mph
+function fmtPaceFromMs(ms) {
+  // ms = m/s, convert to min/mi
+  if (!ms || ms <= 0) return '—';
+  const minPerMile = 26.8224 / ms;
+  const mins = Math.floor(minPerMile);
+  const secs = Math.round((minPerMile - mins) * 60);
+  return `${mins}:${secs.toString().padStart(2,'0')}`;
+}
+
+function deltaHtml(current, reference, lowerBetter=false) {
+  if (current == null || reference == null) return '';
+  const pct = ((current - reference) / reference * 100);
+  const better = lowerBetter ? pct < -1 : pct > 1;
+  const worse  = lowerBetter ? pct > 1  : pct < -1;
+  const sign   = pct >= 0 ? '+' : '';
+  const cls    = better ? 'delta-pos' : worse ? 'delta-neg' : 'delta-neu';
+  return `<span class="stat-delta ${cls}">${sign}${pct.toFixed(1)}%</span>`;
+}
+
+function compRow(label, val, refVal, formatter, lowerBetter=false) {
+  if (val == null) return `<div class="stat-comp-row"><span class="stat-comp-label">${label}</span><span class="stat-comp-val no-data-msg">No data</span></div>`;
+  return `<div class="stat-comp-row">
+    <span class="stat-comp-label">${label}</span>
+    <span class="stat-comp-val">${formatter(val)} ${refVal != null ? deltaHtml(val, refVal, lowerBetter) : ''}</span>
+  </div>`;
+}
+
+function renderAnalytics() {
+  const acts = filterActivitiesForAnalytics();
+  const { thisMonth, last3Months, lastYear } = bucketByPeriod(acts);
+
+  // ── Aerobic Efficiency ──────────────────────────────────────────────────────
+  const aeThis   = avg(thisMonth.map(a   => a.average_speed && a.average_heartrate ? a.average_speed/a.average_heartrate*1000 : null));
+  const ae3mo    = avg(last3Months.map(a => a.average_speed && a.average_heartrate ? a.average_speed/a.average_heartrate*1000 : null));
+  const aeYear   = avg(lastYear.map(a    => a.average_speed && a.average_heartrate ? a.average_speed/a.average_heartrate*1000 : null));
+
+  document.getElementById('ac-ae-main').innerHTML =
+    aeThis != null ? `${fmtAE(aeThis)}<span>AE score</span>` : '<span style="font-size:16px">No data this month</span>';
+  document.getElementById('ac-ae-comps').innerHTML =
+    compRow('vs 3-month avg', aeThis, ae3mo, fmtAE) +
+    compRow('vs 12-month avg', aeThis, aeYear, fmtAE);
+
+  // ── Threshold Pace (avg pace when HR > 88% of estimated max HR) ─────────────
+  function thresholdPace(bucket) {
+    const paces = [];
+    bucket.forEach(a => {
+      if (!a.avg_heartrate || !a.average_speed) return;
+      // Estimate max HR as highest avg HR seen + 10% buffer
+      const allHRs = acts.map(x=>x.avg_heartrate).filter(Boolean);
+      const estMaxHR = allHRs.length ? Math.max(...allHRs) * 1.08 : 190;
+      if (a.avg_heartrate >= estMaxHR * 0.88) {
+        paces.push(a.average_speed);
+      }
+    });
+    return avg(paces);
+  }
+  const tpThis = thresholdPace(thisMonth);
+  const tp3mo  = thresholdPace(last3Months);
+  const tpYear = thresholdPace(lastYear);
+
+  document.getElementById('ac-thresh-main').innerHTML =
+    tpThis != null ? `${fmtPaceFromMs(tpThis)}<span>/mi</span>` : '<span style="font-size:16px">No data this month</span>';
+  document.getElementById('ac-thresh-comps').innerHTML =
+    compRow('vs 3-month avg', tpThis, tp3mo, fmtPaceFromMs, true) +
+    compRow('vs 12-month avg', tpThis, tpYear, fmtPaceFromMs, true);
+
+  // ── Average Speed ──────────────────────────────────────────────────────────
+  const spThis  = avg(thisMonth.map(a   => a.average_speed));
+  const sp3mo   = avg(last3Months.map(a => a.average_speed));
+  const spYear  = avg(lastYear.map(a    => a.average_speed));
+
+  document.getElementById('ac-speed-main').innerHTML =
+    spThis != null ? `${fmtSpeed(spThis)}<span>mph</span>` : '<span style="font-size:16px">No data this month</span>';
+  document.getElementById('ac-speed-comps').innerHTML =
+    compRow('vs 3-month avg', spThis, sp3mo, fmtSpeed) +
+    compRow('vs 12-month avg', spThis, spYear, fmtSpeed);
+
+  // ── Shoe breakdown (AE by shoe) ────────────────────────────────────────────
+  const shoeId = document.getElementById('af-shoe').value;
+  const shoesCard = document.getElementById('ac-shoes-card');
+  const shoesBars = document.getElementById('ac-shoes-bars');
+
+  if (shoeId === 'all') {
+    const byShoe = new Map();
+    acts.forEach(a => {
+      if (!a.gear_name || !a.average_speed || !a.average_heartrate) return;
+      const key = a.gear_name;
+      if (!byShoe.has(key)) byShoe.set(key, []);
+      byShoe.get(key).push(a.average_speed / a.average_heartrate * 1000);
+    });
+    if (byShoe.size > 1) {
+      shoesCard.style.display = 'block';
+      const scored = [...byShoe.entries()]
+        .map(([name, vals]) => ({ name, ae: avg(vals) }))
+        .filter(x => x.ae)
+        .sort((a,b) => b.ae - a.ae);
+      const maxAE = scored[0]?.ae || 1;
+      shoesBars.innerHTML = scored.map((s,i) => `
+        <div class="stat-bar-row">
+          <div class="stat-bar-lbl" title="${s.name}">${i===0?'🏆 ':''}${s.name.length>12?s.name.slice(0,11)+'…':s.name}</div>
+          <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(s.ae/maxAE*100).toFixed(1)}%"></div></div>
+          <div class="stat-bar-val">${fmtAE(s.ae)}</div>
+        </div>`).join('');
+    } else {
+      shoesCard.style.display = 'none';
+    }
+  } else {
+    shoesCard.style.display = 'none';
+  }
+}
 // HOVER
 function syncCrosshair(frac){
   // Move all three vlines to the same fractional position

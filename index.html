@@ -2,8 +2,26 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Senén Strava Visualizer</title>
+<meta name="description" content="Visualize and compare your Strava runs with animated elevation, pace and heart rate charts.">
+<meta name="theme-color" content="#16a34a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Senén Viz">
+<link rel="manifest" href="data:application/json,{
+  &quot;name&quot;: &quot;Senén Strava Visualizer&quot;,
+  &quot;short_name&quot;: &quot;Senén Viz&quot;,
+  &quot;description&quot;: &quot;Visualize your Strava runs&quot;,
+  &quot;start_url&quot;: &quot;/strava_visualizer/&quot;,
+  &quot;display&quot;: &quot;standalone&quot;,
+  &quot;background_color&quot;: &quot;#f5f4f0&quot;,
+  &quot;theme_color&quot;: &quot;#16a34a&quot;,
+  &quot;orientation&quot;: &quot;portrait-primary&quot;,
+  &quot;icons&quot;: [{&quot;src&quot;: &quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='115' fill='%2316a34a'/%3E%3Cpath d='M140 370 L256 140 L372 370' stroke='white' stroke-width='40' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M186 286 L326 286' stroke='white' stroke-width='30' stroke-linecap='round' opacity='0.6'/%3E%3C/svg%3E&quot;, &quot;sizes&quot;: &quot;512x512&quot;, &quot;type&quot;: &quot;image/svg+xml&quot;}]
+}">
+<!-- Apple touch icon (inline SVG → base64 PNG fallback via canvas) -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='115' fill='%2316a34a'/%3E%3Cpath d='M140 370 L256 140 L372 370' stroke='white' stroke-width='40' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M186 286 L326 286' stroke='white' stroke-width='30' stroke-linecap='round' opacity='0.6'/%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -12,7 +30,8 @@
   --grid: #e8e5de; --accent: #16a34a;
   --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
 }
-body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 24px 80px; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; min-height: -webkit-fill-available; display: flex; flex-direction: column; align-items: center; padding: 40px 24px 80px; padding-top: max(40px, env(safe-area-inset-top)); padding-bottom: max(80px, env(safe-area-inset-bottom)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+html { height: -webkit-fill-available; }
 
 .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 32px; align-self: flex-start; }
 .logo svg { width: 28px; height: 28px; }
@@ -117,6 +136,19 @@ svg { display: block; overflow: visible; }
 .grid-line { stroke: #ece9e2; stroke-width: 1; }
 
 .controls-card { background: var(--surface); border-radius: 16px; padding: 16px 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .controls-card { position: sticky; bottom: env(safe-area-inset-bottom, 12px); z-index: 10; margin-bottom: 4px; }
+  .chart-card { padding: 16px 14px 12px; }
+  .viz-header { flex-direction: column; gap: 12px; }
+  .live-stats { width: 100%; }
+  .ls { flex: 1; padding: 10px 10px; }
+  .ls-val { font-size: 16px; }
+  .race-legend { gap: 6px; }
+  .race-pill { font-size: 9px; padding: 4px 8px 4px 6px; }
+  #setup-screen, #callback-screen, #picker-screen { margin-top: 10px; }
+  .dist-tabs { gap: 6px; }
+  .dtab { padding: 7px 13px; font-size: 10px; }
+}
 .ctrl-btn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 9px 20px; border-radius: 100px; cursor: pointer; border: 1.5px solid var(--ink); background: var(--ink); color: white; transition: opacity 0.15s; min-width: 76px; text-align: center; }
 .ctrl-btn:hover { opacity: 0.8; }
 .ctrl-btn.outline { background: transparent; color: var(--ink); }
@@ -928,6 +960,56 @@ window.addEventListener('load',async()=>{
     showScreen('setup');
   }
 });
+
+// ── SERVICE WORKER (PWA offline support) ──────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    const CACHE = 'senen-viz-v1';
+    const ASSETS = [self.location.href];
+    self.addEventListener('install', e => {
+      e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+    });
+    self.addEventListener('fetch', e => {
+      e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+    });
+  `;
+  const blob = new Blob([swCode], {type: 'application/javascript'});
+  const swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl).catch(()=>{});
+}
+
+// ── iOS INSTALL BANNER ─────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone;
+  const dismissed = sessionStorage.getItem('install-dismissed');
+  if (isIOS && !isStandalone && !dismissed) {
+    const banner = document.createElement('div');
+    banner.id = 'install-banner';
+    banner.style.cssText = `
+      position: fixed; bottom: max(16px, env(safe-area-inset-bottom));
+      left: 16px; right: 16px; z-index: 1000;
+      background: #1c1c1c; color: white; border-radius: 14px;
+      padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+      font-family: 'DM Sans', sans-serif; font-size: 13px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      animation: slideUp 0.3s ease;
+    `;
+    banner.innerHTML = `
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#16a34a"/><path d="M9 23 L16 9 L23 23" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M12 18 L20 18" stroke="white" stroke-width="1.8" stroke-linecap="round" opacity="0.6"/></svg>
+      <div style="flex:1">
+        <div style="font-weight:600;margin-bottom:2px">Add to Home Screen</div>
+        <div style="font-size:11px;opacity:0.65">Tap <strong>Share</strong> → <strong>Add to Home Screen</strong> to install Senén Viz</div>
+      </div>
+      <button onclick="document.getElementById('install-banner').remove();sessionStorage.setItem('install-dismissed','1')"
+        style="background:none;border:none;color:white;font-size:20px;cursor:pointer;opacity:0.6;padding:0 4px">×</button>
+    `;
+    document.body.appendChild(banner);
+  }
+});
 </script>
+<style>
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+</style>
 </body>
 </html>

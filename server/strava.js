@@ -100,8 +100,7 @@ async function syncActivities(athlete) {
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
         ON CONFLICT (strava_id) DO UPDATE SET
           name=EXCLUDED.name, gear_id=EXCLUDED.gear_id,
-          avg_heartrate=EXCLUDED.avg_heartrate, ae_score=EXCLUDED.ae_score,
-          updated_at=NOW()
+          avg_heartrate=EXCLUDED.avg_heartrate, ae_score=EXCLUDED.ae_score
       `, [
         a.id, athlete.strava_id, a.name,
         a.distance, a.moving_time, a.elapsed_time,

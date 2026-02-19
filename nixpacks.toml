@@ -8,15 +8,3 @@ healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
-```
-
-Click **"Commit changes"**.
-
----
-
-After both commits Railway will auto-redeploy. Watch the **Deploy Logs** in Railway — you should now see:
-```
-Installing Node.js 20...
-npm install ...
-✅ DB schema initialized
-🚀 Senén Strava Visualizer running on port 3000

@@ -1,11 +1,22 @@
-[phases.setup]
-nixPkgs = ["nodejs_20"]
+[build]
+builder = "nixpacks"
+buildCommand = "npm install"
 
-[phases.install]
-cmds = ["npm install"]
+[deploy]
+startCommand = "node server/index.js"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+```
 
-[phases.build]
-cmds = []
+Click **"Commit changes"**.
 
-[start]
-cmd = "node server/index.js"
+---
+
+After both commits Railway will auto-redeploy. Watch the **Deploy Logs** in Railway — you should now see:
+```
+Installing Node.js 20...
+npm install ...
+✅ DB schema initialized
+🚀 Senén Strava Visualizer running on port 3000

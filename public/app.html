@@ -363,10 +363,17 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
     <p>Higher = better. Speed (m/s) ÷ Heart Rate × 1000</p>
   </div>
   <div class="trend-tab-row" id="trend-tabs">
-    <button class="dtab" data-min="4000"  data-max="6500"  onclick="setTrendDist(this)">5K</button>
-    <button class="dtab" data-min="8500"  data-max="12000" onclick="setTrendDist(this)">10K</button>
-    <button class="dtab" data-min="14500" data-max="18000" onclick="setTrendDist(this)">10 mi</button>
+    <button class="dtab" data-min="0"     data-max="999999" onclick="setTrendDist(this)">All Races</button>
+    <button class="dtab" data-min="4000"  data-max="6500"   onclick="setTrendDist(this)">5K</button>
+    <button class="dtab" data-min="8500"  data-max="12000"  onclick="setTrendDist(this)">10K</button>
+    <button class="dtab" data-min="14500" data-max="18000"  onclick="setTrendDist(this)">10 mi</button>
     <button class="dtab active" data-min="18000" data-max="24000" onclick="setTrendDist(this)">Half Marathon</button>
+  </div>
+  <div class="trend-tab-row" style="align-items:center;gap:10px">
+    <span class="filter-label">Shoe</span>
+    <select class="filter-select" id="trend-shoe" onchange="drawTrend()">
+      <option value="all">All shoes</option>
+    </select>
   </div>
   <div class="chart-card">
     <div class="chart-title">Aerobic Efficiency Trend</div>
@@ -1478,7 +1485,7 @@ function updateStats(idx){
 }
 
 // ── TREND SCREEN ──────────────────────────────────────────────────────────────
-let trendDistMin=18000, trendDistMax=24000;
+let trendDistMin=18000, trendDistMax=24000, trendDistAll=false;
 
 function setTrendDist(btn){
   trendDistMin=parseInt(btn.dataset.min);
@@ -1494,9 +1501,29 @@ function showTrend(){
 }
 
 function drawTrend(){
+  // Populate shoe dropdown
+  const shoeSelEl = document.getElementById('trend-shoe');
+  if (shoeSelEl) {
+    const currentShoe = shoeSelEl.value;
+    const shoes = new Map();
+    S.activities.forEach(a => { if (a.gear_id && a.gear_name) shoes.set(a.gear_id, a.gear_name); });
+    while (shoeSelEl.options.length > 1) shoeSelEl.remove(1);
+    shoes.forEach((name, id) => {
+      const opt = document.createElement('option');
+      opt.value = id; opt.textContent = '👟 ' + name;
+      if (id === currentShoe) opt.selected = true;
+      shoeSelEl.appendChild(opt);
+    });
+    if (currentShoe && currentShoe !== 'all') shoeSelEl.value = currentShoe;
+  }
+
+  const selectedShoe = shoeSelEl ? shoeSelEl.value : 'all';
+
   const runs=S.activities.filter(a=>{
     const isRun=['Run','VirtualRun','TrailRun'].includes(a.type)||(a.sport_type||'').toLowerCase().includes('run');
-    return isRun && a.distance>=trendDistMin && a.distance<=trendDistMax && a.has_heartrate && a.average_heartrate && a.average_speed;
+    const distOk = a.distance>=trendDistMin && a.distance<=trendDistMax;
+    const shoeOk = selectedShoe==='all' || a.gear_id===selectedShoe;
+    return isRun && distOk && shoeOk && a.has_heartrate && a.average_heartrate && a.average_speed;
   }).sort((a,b)=>new Date(a.start_date_local)-new Date(b.start_date_local));
 
   const list=document.getElementById('trend-list');

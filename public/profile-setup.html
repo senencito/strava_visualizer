@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Profile Setup · Senén Viz</title>
+<meta name="theme-color" content="#16a34a">
+<style>
+  :root {
+    --bg: #f5f4f0; --surface: #fff; --ink: #1c1c1c;
+    --ink-muted: #888; --grid: #e8e5de; --accent: #16a34a;
+    --sans: 'DM Sans', system-ui, sans-serif;
+    --mono: 'DM Mono', 'Courier New', monospace;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--ink); font-family: var(--sans);
+    min-height: 100vh; display: flex; align-items: center;
+    justify-content: center; padding: 40px 24px;
+  }
+  .card {
+    background: var(--surface); border-radius: 20px;
+    padding: 40px 36px; max-width: 420px; width: 100%;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+  }
+  .logo { display: flex; align-items: center; gap: 8px; margin-bottom: 28px; }
+  .logo-text { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--ink-muted); }
+  h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 6px; }
+  .subtitle { font-size: 13px; color: var(--ink-muted); margin-bottom: 28px; line-height: 1.5; }
+  .field { margin-bottom: 20px; }
+  .field label { display: block; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); margin-bottom: 8px; }
+  .field select, .field input {
+    width: 100%; padding: 12px 14px; border: 1.5px solid var(--grid);
+    border-radius: 10px; font-family: var(--sans); font-size: 14px;
+    background: var(--bg); color: var(--ink); outline: none;
+    transition: border-color 0.15s;
+  }
+  .field select:focus, .field input:focus { border-color: var(--accent); }
+  .note { font-size: 11px; color: var(--ink-muted); margin-top: 6px; line-height: 1.5; }
+  .btn-row { display: flex; gap: 10px; margin-top: 28px; }
+  .btn {
+    flex: 1; padding: 14px; border-radius: 12px; font-family: var(--sans);
+    font-size: 14px; font-weight: 600; cursor: pointer; border: none;
+    transition: background 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #15803d; }
+  .btn-skip { background: var(--bg); color: var(--ink-muted); border: 1.5px solid var(--grid); }
+  .btn-skip:hover { border-color: #bbb; color: var(--ink); }
+  .err { margin-top: 12px; font-size: 12px; color: #dc2626; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
+      <rect width="32" height="32" rx="8" fill="#16a34a"/>
+      <path d="M9 23 L16 9 L23 23" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <path d="M12 18 L20 18" stroke="white" stroke-width="1.8" stroke-linecap="round" opacity="0.6"/>
+    </svg>
+    <span class="logo-text">SENÉN VIZ</span>
+  </div>
+
+  <h2>One quick thing</h2>
+  <p class="subtitle">
+    Strava doesn't share your birthdate or sex via their API.
+    Adding these lets us show age-graded performance comparisons in the future.
+    This is optional and only stored for you.
+  </p>
+
+  <div class="field">
+    <label>Sex</label>
+    <select id="sel-sex">
+      <option value="">Prefer not to say</option>
+      <option value="M">Male</option>
+      <option value="F">Female</option>
+      <option value="X">Non-binary / Other</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label>Date of Birth</label>
+    <input type="date" id="inp-birth" max="">
+    <div class="note">Used only for age-group comparisons. Never shared.</div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-skip" onclick="skip()">Skip for now</button>
+    <button class="btn btn-primary" onclick="save()">Save & Continue →</button>
+  </div>
+  <div class="err" id="err" style="display:none"></div>
+</div>
+
+<script>
+  // Set max date to today
+  document.getElementById('inp-birth').max = new Date().toISOString().split('T')[0];
+
+  async function save() {
+    const sex      = document.getElementById('sel-sex').value;
+    const birthdate = document.getElementById('inp-birth').value;
+    const errEl    = document.getElementById('err');
+    errEl.style.display = 'none';
+
+    const res = await fetch('/api/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sex: sex || null, birthdate: birthdate || null }),
+    });
+
+    if (!res.ok) {
+      errEl.style.display = 'block';
+      errEl.textContent = 'Failed to save. Please try again.';
+      return;
+    }
+
+    window.location.href = '/app';
+  }
+
+  function skip() {
+    // Save empty values so we don't show this again
+    fetch('/api/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sex: null, birthdate: null }),
+    }).finally(() => { window.location.href = '/app'; });
+  }
+</script>
+</body>
+</html>

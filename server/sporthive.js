@@ -2,8 +2,9 @@
 const fetch = require('node-fetch');
 const { query, queryOne } = require('../db/client');
 
-const PAGE_SIZE = 100;
-const RATE_LIMIT_MS = 350; // polite delay between pages
+const PAGE_SIZE = 50;   // Sporthive max per request
+const RATE_LIMIT_MS = 350;
+const API_BASE = 'https://eventresults-api.sporthive.com/api';
 
 // ── Parse event/race IDs from any Sporthive URL ───────────────────────────────
 // Handles:
@@ -22,8 +23,7 @@ function parseSporthiveUrl(url) {
 
 // ── Fetch available races for an event ────────────────────────────────────────
 async function fetchEventRaces(eventId) {
-  // Try the event detail endpoint
-  const url = `https://sporthive.com/api/events/${eventId}`;
+  const url = `${API_BASE}/events/${eventId}`;
   const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SenenViz/1.0)', 'Accept': 'application/json' },
     timeout: 15000,
@@ -41,8 +41,8 @@ async function fetchEventRaces(eventId) {
 }
 
 // ── Fetch one page ─────────────────────────────────────────────────────────────
-async function fetchPage(eventId, raceId, page) {
-  const url = `https://sporthive.com/api/events/${eventId}/races/${raceId}/participants?count=${PAGE_SIZE}&page=${page}`;
+async function fetchPage(eventId, raceId, offset) {
+  const url = `${API_BASE}/events/${eventId}/races/${raceId}/classifications/search?count=${PAGE_SIZE}&offset=${offset}`;
   const res = await fetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; SenenViz/1.0)',
@@ -52,31 +52,48 @@ async function fetchPage(eventId, raceId, page) {
   });
 
   if (res.status === 404) return [];
-  if (!res.ok) throw new Error(`Sporthive API ${res.status} on page ${page}`);
+  if (!res.ok) throw new Error(`Sporthive API ${res.status} at offset ${offset}`);
 
   const data = await res.json();
 
-  // Handle different response shapes
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data.participants)) return data.participants;
-  if (Array.isArray(data.results)) return data.results;
+  // Response shape: { fullClassifications: [ { classification: {...} }, ... ] }
+  if (Array.isArray(data.fullClassifications)) {
+    return data.fullClassifications.map(f => normalizeFinisher(f.classification || f));
+  }
+  // Fallback shapes
+  if (Array.isArray(data)) return data.map(f => normalizeFinisher(f));
   return [];
+}
+
+// Normalize different field name conventions to a consistent shape
+function normalizeFinisher(f) {
+  return {
+    bib:          f.bib || f.bibNumber || f.startNumber || null,
+    name:         f.name || [f.firstName, f.lastName].filter(Boolean).join(' ') || null,
+    gender:       f.gender ?? (f.genderCode === 'M' ? 1 : f.genderCode === 'F' ? 2 : null),
+    category:     f.category || f.ageGroup || f.categoryName || null,
+    rank:         f.rank ?? f.overallRank ?? f.position ?? null,
+    genderRank:   f.genderRank ?? f.rankGender ?? null,
+    categoryRank: f.categoryRank ?? f.rankCategory ?? null,
+    chipTime:     f.chipTime ?? f.finishTime ?? f.time ?? null,
+    countryCode:  f.countryCode || f.nationality || null,
+  };
 }
 
 // ── Fetch ALL finishers across pages ──────────────────────────────────────────
 async function fetchAllFinishers(eventId, raceId, onProgress) {
   const all = [];
-  let page = 0;
+  let offset = 0;
 
   while (true) {
-    const batch = await fetchPage(eventId, raceId, page);
+    const batch = await fetchPage(eventId, raceId, offset);
     if (!batch.length) break;
 
     all.push(...batch);
     if (onProgress) onProgress(all.length);
 
     if (batch.length < PAGE_SIZE) break;
-    page++;
+    offset += batch.length;
     await new Promise(r => setTimeout(r, RATE_LIMIT_MS));
   }
 

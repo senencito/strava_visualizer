@@ -65,8 +65,23 @@ async function fetchPage(eventId, raceId, offset) {
   return [];
 }
 
+// Parse time to seconds — handles "01:10:35", "1:10:35", 4235 (already seconds)
+function parseTimeToSeconds(val) {
+  if (val == null) return null;
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    const parts = val.trim().split(':').map(Number);
+    if (parts.some(isNaN)) return null;
+    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+    if (parts.length === 2) return parts[0]*60 + parts[1];
+    if (parts.length === 1) return parts[0];
+  }
+  return null;
+}
+
 // Normalize different field name conventions to a consistent shape
 function normalizeFinisher(f) {
+  const rawTime = f.chipTime ?? f.finishTime ?? f.time ?? f.gunTime ?? null;
   return {
     bib:          f.bib || f.bibNumber || f.startNumber || null,
     name:         f.name || [f.firstName, f.lastName].filter(Boolean).join(' ') || null,
@@ -75,7 +90,7 @@ function normalizeFinisher(f) {
     rank:         f.rank ?? f.overallRank ?? f.position ?? null,
     genderRank:   f.genderRank ?? f.rankGender ?? null,
     categoryRank: f.categoryRank ?? f.rankCategory ?? null,
-    chipTime:     f.chipTime ?? f.finishTime ?? f.time ?? null,
+    chipTime:     parseTimeToSeconds(rawTime),
     countryCode:  f.countryCode || f.nationality || null,
   };
 }

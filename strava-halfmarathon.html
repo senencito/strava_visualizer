@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Senén Strava Visualizer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f5f4f0; --surface: #fff; --ink: #1c1c1c; --ink-muted: #999;
+  --grid: #e8e5de; --accent: #16a34a;
+  --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 40px 24px 80px; }
+
+.logo { display: flex; align-items: center; gap: 10px; margin-bottom: 32px; align-self: flex-start; }
+.logo svg { width: 28px; height: 28px; }
+.logo span { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+
+.card { background: var(--surface); border-radius: 18px; padding: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 6px 24px rgba(0,0,0,0.05); }
+
+.field { margin-bottom: 15px; }
+.field label { display: block; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-muted); margin-bottom: 6px; }
+.field input { width: 100%; padding: 10px 13px; border: 1.5px solid var(--grid); border-radius: 9px; font-family: var(--mono); font-size: 13px; background: var(--bg); color: var(--ink); outline: none; transition: border-color 0.15s; }
+.field input:focus { border-color: var(--accent); }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; padding: 11px 22px; border-radius: 100px; font-family: var(--sans); font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: opacity 0.15s; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { opacity: 0.85; }
+.btn-outline { background: transparent; color: var(--ink); border: 1.5px solid var(--ink); }
+.btn-outline:hover { background: var(--ink); color: white; }
+.btn-block { width: 100%; }
+.btn-sm { padding: 8px 16px; font-size: 12px; }
+
+.err { display: none; margin-top: 12px; padding: 11px 14px; background: #fff3f0; border: 1px solid #fdc8b8; border-radius: 9px; font-size: 12px; color: #c0392b; }
+.hint { margin-top: 16px; padding: 12px 14px; background: #f0fdf4; border-radius: 9px; border: 1px solid #bbf7d0; font-size: 12px; color: #166534; line-height: 1.6; }
+.hint a { color: var(--accent); } .hint code { font-family: var(--mono); font-size: 11px; background: #dcfce7; padding: 1px 4px; border-radius: 3px; }
+.back-link { font-family: var(--mono); font-size: 11px; color: var(--ink-muted); background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; margin-top: 14px; padding: 0; }
+.back-link:hover { color: var(--ink); }
+.dist-tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+.dtab { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 18px; border-radius: 100px; border: 1.5px solid var(--grid); background: transparent; color: var(--ink-muted); cursor: pointer; transition: all 0.15s; }
+.dtab:hover { border-color: #bbb; color: var(--ink); }
+.dtab.active { background: var(--ink); border-color: var(--ink); color: white; }
+
+/* SCREENS */
+#setup-screen    { display: none; flex-direction: column; width: 100%; max-width: 420px; margin-top: 20px; }
+#callback-screen { display: none; flex-direction: column; width: 100%; max-width: 420px; margin-top: 20px; }
+#picker-screen   { display: none; flex-direction: column; width: 100%; max-width: 620px; margin-top: 20px; }
+#viz-screen      { display: none; flex-direction: column; width: 100%; max-width: 980px; }
+
+/* SETUP */
+#setup-screen h2 { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+#setup-screen p { font-size: 13px; color: var(--ink-muted); line-height: 1.6; margin-bottom: 22px; }
+
+/* CALLBACK */
+#callback-screen .card { text-align: center; }
+#callback-screen h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+#callback-screen p { font-size: 13px; color: var(--ink-muted); line-height: 1.6; margin-bottom: 16px; }
+.field-inline { display: flex; gap: 8px; margin-bottom: 12px; }
+.field-inline input { flex: 1; padding: 9px 13px; border: 1.5px solid var(--grid); border-radius: 9px; font-family: var(--mono); font-size: 12px; background: var(--bg); color: var(--ink); outline: none; }
+
+/* PICKER */
+.picker-header { margin-bottom: 18px; }
+.picker-header h2 { font-size: 21px; font-weight: 600; letter-spacing: -0.02em; }
+.picker-header p { font-size: 13px; color: var(--ink-muted); margin-top: 4px; }
+.activity-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
+.activity-item { background: var(--surface); border: 1.5px solid var(--grid); border-radius: 13px; padding: 14px 18px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: border-color 0.15s, background 0.15s; user-select: none; }
+.activity-item:hover { border-color: #ccc; }
+.activity-item.selected { border-color: var(--accent); background: #f0fdf4; }
+.act-left { display: flex; align-items: center; gap: 12px; }
+.check { width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid var(--grid); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.activity-item.selected .check { background: var(--accent); border-color: var(--accent); }
+.activity-item.selected .check::after { content: ''; width: 6px; height: 6px; background: white; border-radius: 50%; display: block; }
+.act-name { font-size: 13px; font-weight: 500; }
+.act-date { font-family: var(--mono); font-size: 10px; color: var(--ink-muted); margin-top: 2px; }
+.act-stats { text-align: right; flex-shrink: 0; }
+.act-dist { font-family: var(--mono); font-size: 14px; font-weight: 500; }
+.act-time { font-family: var(--mono); font-size: 10px; color: var(--ink-muted); margin-top: 2px; }
+.loading-msg { text-align: center; padding: 28px; font-family: var(--mono); font-size: 12px; color: var(--ink-muted); }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--grid); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 10px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* VIZ */
+.viz-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; gap: 16px; flex-wrap: wrap; }
+.viz-title .lbl { font-family: var(--mono); font-size: 10px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.1em; }
+.viz-title .name { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-top: 3px; }
+.viz-title .date { font-family: var(--mono); font-size: 11px; color: var(--ink-muted); margin-top: 3px; }
+
+.live-stats { display: flex; flex-wrap: wrap; }
+.ls { padding: 10px 18px; background: var(--surface); border-top: 1px solid var(--grid); border-bottom: 1px solid var(--grid); border-right: 1px solid var(--grid); }
+.ls:first-child { border-left: 1px solid var(--grid); border-radius: 11px 0 0 11px; }
+.ls:last-child { border-radius: 0 11px 11px 0; }
+.ls-val { font-family: var(--mono); font-size: 19px; font-weight: 500; line-height: 1; }
+.ls-lbl { font-family: var(--mono); font-size: 9px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 5px; }
+
+.race-legend { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.race-pill { display: flex; align-items: center; gap: 6px; padding: 4px 8px 4px 7px; background: var(--surface); border: 1px solid var(--grid); border-radius: 100px; font-family: var(--mono); font-size: 10px; color: var(--ink-muted); transition: opacity 0.2s; }
+.pill-name { flex: 1; }
+.eye-btn { background: none; border: none; cursor: pointer; font-size: 13px; padding: 0 2px; color: var(--ink-muted); line-height: 1; transition: opacity 0.15s; }
+.eye-btn:hover { color: var(--ink); }
+.wtype-badge { display: inline-block; font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; padding: 2px 6px; border-radius: 4px; background: #f0ede6; color: #888; margin-left: 5px; vertical-align: middle; }
+.hr-flag { display: inline-block; font-size: 11px; color: #22c55e; margin-left: 4px; vertical-align: middle; line-height: 1; }
+.wtype-badge.wtype-pill { background: transparent; border: 1px solid var(--grid); margin-left: 3px; }
+/* Race type gets accent color */
+.wtype-race { background: #fff0eb !important; color: #fc4c02 !important; border-color: #fdddd5 !important; }
+.color-pick { -webkit-appearance:none; appearance:none; width:18px; height:18px; border:none; border-radius:50%; padding:0; cursor:pointer; background:none; flex-shrink:0; }
+.color-pick::-webkit-color-swatch-wrapper { padding:0; border-radius:50%; }
+.color-pick::-webkit-color-swatch { border:2px solid rgba(0,0,0,0.1); border-radius:50%; }
+
+
+.chart-card { background: var(--surface); border-radius: 16px; padding: 20px 24px 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04); margin-bottom: 10px; }
+.chart-title { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-muted); margin-bottom: 12px; }
+
+svg { display: block; overflow: visible; }
+.axis-text { font-family: 'DM Mono', monospace; font-size: 9px; fill: #bbb; }
+.grid-line { stroke: #ece9e2; stroke-width: 1; }
+
+.controls-card { background: var(--surface); border-radius: 16px; padding: 16px 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04); display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ctrl-btn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 9px 20px; border-radius: 100px; cursor: pointer; border: 1.5px solid var(--ink); background: var(--ink); color: white; transition: opacity 0.15s; min-width: 76px; text-align: center; }
+.ctrl-btn:hover { opacity: 0.8; }
+.ctrl-btn.outline { background: transparent; color: var(--ink); }
+.ctrl-btn.outline:hover { background: var(--ink); color: white; }
+.scrub-wrap { flex: 1; min-width: 80px; }
+input[type=range] { -webkit-appearance: none; width: 100%; height: 3px; background: var(--grid); border-radius: 2px; outline: none; cursor: pointer; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: var(--ink); cursor: pointer; }
+.speed-wrap { display: flex; align-items: center; gap: 9px; }
+.speed-lbl { font-family: var(--mono); font-size: 10px; color: var(--ink-muted); white-space: nowrap; }
+.speed-val { font-family: var(--mono); font-size: 12px; font-weight: 500; min-width: 28px; }
+.speed-slider { width: 88px !important; }
+
+.tip { position: fixed; background: white; border: 1px solid var(--grid); border-radius: 10px; padding: 9px 13px; font-family: var(--mono); font-size: 11px; pointer-events: none; box-shadow: 0 4px 20px rgba(0,0,0,0.1); display: none; z-index: 100; }
+.tip-mi { font-size: 9px; color: var(--ink-muted); margin-bottom: 5px; }
+.tip-row { display: flex; justify-content: space-between; gap: 12px; line-height: 1.75; }
+.tip-lbl { color: var(--ink-muted); }
+
+#dbg { display:none; position:fixed; bottom:0; left:0; right:0; background:#111; color:#0f0; font-family:monospace; font-size:11px; padding:7px 12px; max-height:120px; overflow-y:auto; z-index:9999; border-top:2px solid #222; }
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="setup-screen">
+  <div class="logo">
+    <svg viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="7" fill="#16a34a"/><path d="M8 20 L14 8 L20 20" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 16 L17 16" stroke="white" stroke-width="1.6" stroke-linecap="round" opacity="0.6"/></svg>
+    <span>Senén Strava Visualizer</span>
+  </div>
+  <div class="card">
+    <h2>Connect Strava</h2>
+    <p>Enter your Strava API credentials to load and visualize your runs.</p>
+    <div class="field"><label>Client ID</label><input type="text" id="client-id" placeholder="e.g. 187019" autocomplete="off"></div>
+    <div class="field"><label>Client Secret</label><input type="password" id="client-secret" autocomplete="off"></div>
+    <button class="btn btn-primary btn-block" onclick="startOAuth()">Connect with Strava →</button>
+    <div class="err" id="setup-err"></div>
+    <p style="margin-top:20px;font-family:var(--mono);font-size:10px;color:var(--ink-muted);text-align:center;letter-spacing:0.05em">SENÉN STRAVA VISUALIZER · BUILT FOR RUNNERS</p>
+    <div class="hint">
+      <strong>🏃 First time? Here's how to connect:</strong><br><br>
+      <strong>Step 1 —</strong> Go to <a href="https://www.strava.com/settings/api" target="_blank">strava.com/settings/api</a> and create a free API application.<br><br>
+      <strong>Step 2 —</strong> In the app settings, set <code>Authorization Callback Domain</code> to the domain where you're viewing this (e.g. <code>senen.netlify.app</code> or <code>localhost</code> if running locally).<br><br>
+      <strong>Step 3 —</strong> Copy your <strong>Client ID</strong> and <strong>Client Secret</strong> from the app page and paste them above.<br><br>
+      <strong>Step 4 —</strong> Click Connect — you'll be redirected to Strava to authorize, then brought back here automatically.<br><br>
+      Your credentials are never stored beyond this browser session.
+    </div>
+  </div>
+</div>
+
+<!-- CALLBACK -->
+<div id="callback-screen">
+  <div class="logo">
+    <svg viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="7" fill="#16a34a"/><path d="M8 20 L14 8 L20 20" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 16 L17 16" stroke="white" stroke-width="1.6" stroke-linecap="round" opacity="0.6"/></svg>
+    <span>Senén Strava Visualizer</span>
+  </div>
+  <div class="card">
+    <h2>Connecting…</h2>
+    <p id="cb-msg">Exchanging token with Strava, please wait.</p>
+    <div class="field-inline" id="manual-row" style="display:none">
+      <input type="text" id="manual-url" placeholder="Paste redirect URL here...">
+      <button class="btn btn-primary btn-sm" onclick="manualExchange()">Go</button>
+    </div>
+    <div class="err" id="cb-err"></div>
+  </div>
+</div>
+
+<!-- PICKER -->
+<div id="picker-screen">
+  <div class="logo">
+    <svg viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="7" fill="#16a34a"/><path d="M8 20 L14 8 L20 20" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 16 L17 16" stroke="white" stroke-width="1.6" stroke-linecap="round" opacity="0.6"/></svg>
+    <span>Senén Strava Visualizer</span>
+  </div>
+  <div class="picker-header">
+    <h2 id="picker-title">Your Runs</h2>
+    <p>Select one or more to compare</p>
+  </div>
+  <div class="dist-tabs" id="dist-tabs">
+    <button class="dtab" data-min="4000"  data-max="6500"  onclick="setDist(this)">5K</button>
+    <button class="dtab" data-min="8500"  data-max="12000" onclick="setDist(this)">10K</button>
+    <button class="dtab" data-min="14500" data-max="18000" onclick="setDist(this)">10 mi</button>
+    <button class="dtab active" data-min="18000" data-max="24000" onclick="setDist(this)">Half Marathon</button>
+  </div>
+  <div id="load-acts" class="loading-msg"><div class="spinner"></div>Fetching activities…</div>
+  <div class="activity-list" id="act-list"></div>
+  <button class="btn btn-primary" id="btn-viz" style="display:none" onclick="loadSelected()">Visualize selected →</button>
+  <div id="load-streams" class="loading-msg" style="display:none"><div class="spinner"></div>Loading GPS streams…</div>
+  <div class="err" id="picker-err"></div>
+  <button class="back-link" onclick="showScreen('setup')">← Change credentials</button>
+</div>
+
+<!-- VIZ -->
+<div id="viz-screen">
+  <div class="viz-header">
+    <div class="viz-title">
+      <div class="lbl">Senén · Strava</div>
+      <div class="name" id="v-name">—</div>
+      <div class="date" id="v-date"></div>
+    </div>
+    <div class="live-stats" id="live-stats">
+      <div class="ls"><div class="ls-val" id="ls-time">0:00:00</div><div class="ls-lbl">Elapsed</div></div>
+      <div class="ls"><div class="ls-val" id="ls-dist">0.00<span style="font-size:11px;color:var(--ink-muted)"> mi</span></div><div class="ls-lbl">Distance</div></div>
+      <div class="ls ls-single" id="ls-pace-wrap"><div class="ls-val" id="ls-pace" style="color:var(--accent)">—</div><div class="ls-lbl">Pace /mi</div></div>
+      <div class="ls ls-single" id="ls-hr-wrap"><div class="ls-val" id="ls-hr" style="color:#c0392b">—<span style="font-size:11px;color:var(--ink-muted)"> bpm</span></div><div class="ls-lbl">Heart Rate</div></div>
+      <div class="ls ls-single" id="ls-elev-wrap"><div class="ls-val" id="ls-elev">—<span style="font-size:11px;color:var(--ink-muted)"> ft</span></div><div class="ls-lbl">Elevation</div></div>
+    </div>
+  </div>
+  <div class="race-legend" id="legend"></div>
+  <div id="crosshair-bar" style="display:none;background:var(--surface);border:1px solid var(--grid);border-radius:12px;padding:10px 16px;margin-bottom:10px;display:none;flex-wrap:wrap;gap:8px 20px;align-items:center;">
+    <span id="xh-dist" style="font-family:var(--mono);font-size:10px;color:var(--ink-muted);margin-right:4px"></span>
+    <div id="xh-rows" style="display:flex;flex-wrap:wrap;gap:6px 18px"></div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Elevation</div>
+    <svg id="esvg" style="width:100%;height:148px"></svg>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Pace</div>
+    <svg id="psvg" style="width:100%;height:128px"></svg>
+  </div>
+  <div class="chart-card" id="hr-card" style="display:none">
+    <div class="chart-title">Heart Rate</div>
+    <svg id="hrsvg" style="width:100%;height:110px"></svg>
+  </div>
+  <div class="controls-card">
+    <button class="ctrl-btn" id="play-btn" onclick="togglePlay()">Play</button>
+    <button class="ctrl-btn outline" onclick="resetAnim()">Reset</button>
+    <div class="scrub-wrap">
+      <input type="range" id="scrubber" min="0" max="1000" value="0" oninput="onScrub(this.value)">
+    </div>
+    <div class="speed-wrap">
+      <span class="speed-lbl">Speed</span>
+      <input type="range" class="speed-slider" id="speed-sl" min="1" max="300" value="8" oninput="onSpeed(this.value)">
+      <span class="speed-val" id="speed-v">8×</span>
+    </div>
+  </div>
+  <button class="back-link" style="margin-top:14px" onclick="showScreen('picker')">← Back to activities</button>
+</div>
+
+<div class="tip" id="tip">
+  <div class="tip-mi" id="tip-mi"></div>
+  <div id="tip-body"></div>
+</div>
+<div id="dbg"></div>
+
+<script>
+const COLORS = ['#16a34a','#2563eb','#fc4c02','#9333ea','#d97706','#0891b2'];
+
+const S = {
+  accessToken:'', activities:[], selectedIds: new Set(),
+  races:[], progress:0, playing:false, speed:8,
+  lastTs:null, rafId:null, maxDuration:0,
+  distMin:18000, distMax:24000,
+  distLabels:{'18000':'Half Marathon','14500':'10 Miles','8500':'10K','4000':'5K'}
+};
+
+function showScreen(n) {
+  ['setup','callback','picker','viz'].forEach(s => document.getElementById(s+'-screen').style.display='none');
+  document.getElementById(n+'-screen').style.display='flex';
+}
+function setDist(btn) {
+  S.distMin = parseInt(btn.dataset.min);
+  S.distMax = parseInt(btn.dataset.max);
+  document.querySelectorAll('.dtab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const label = S.distLabels[btn.dataset.min] || 'Runs';
+  document.getElementById('picker-title').textContent = 'Your ' + label + 's';
+  S.selectedIds.clear();
+  document.getElementById('btn-viz').style.display='none';
+  filterAndRenderList();
+}
+function filterAndRenderList() {
+  const filtered = S.activities.filter(a => {
+    const isRun=['Run','VirtualRun','TrailRun'].includes(a.type)||(a.sport_type||'').toLowerCase().includes('run');
+    return isRun && a.distance >= S.distMin && a.distance <= S.distMax;
+  });
+  if(!filtered.length){
+    document.getElementById('act-list').innerHTML=`<p style="color:var(--ink-muted);font-size:13px;padding:10px 0">No runs found for this distance in your history.</p>`;
+  } else {
+    renderList(filtered);
+  }
+}
+function dbg(m) {
+  console.log(m);
+  const p=document.getElementById('dbg'); p.style.display='block';
+  const d=document.createElement('div'); d.textContent='› '+m; p.appendChild(d); p.scrollTop=p.scrollHeight;
+}
+function showErr(id,m){const e=document.getElementById(id);e.textContent=m;e.style.display='block';}
+function hideErr(id){document.getElementById(id).style.display='none';}
+const WORKOUT_TYPES = {
+  0: null, 1: 'Race', 2: 'Long Run', 3: 'Workout',
+  10: 'Default', 11: 'Race', 12: 'Long Run', 13: 'Workout'
+};
+function workoutLabel(type) { return WORKOUT_TYPES[type] || null; }
+
+function fmtTime(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.floor(s%60);return `${h}:${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}`;}
+function fmtPace(mpm){const m=Math.floor(mpm),s=Math.round((mpm-m)*60);return `${m}:${String(s).padStart(2,'0')}`;}
+function niceTicks(mn,mx,n){const st=(mx-mn)/(n-1);return Array.from({length:n},(_,i)=>mn+i*st);}
+function smoothArr(arr, win){
+  if(!arr) return null;
+  const out=[];
+  for(let i=0;i<arr.length;i++){
+    let sum=0,cnt=0;
+    for(let j=Math.max(0,i-win);j<=Math.min(arr.length-1,i+win);j++){
+      if(arr[j]>0){sum+=arr[j];cnt++;}
+    }
+    out.push(cnt>0?Math.round(sum/cnt):null);
+  }
+  return out;
+}
+// Time-based smoothing: average pace over a window of seconds
+function smoothPaceByTime(pace, time_s, windowSec){
+  if(!pace||!time_s) return null;
+  const n=pace.length, out=[];
+  for(let i=0;i<n;i++){
+    const t=time_s[i];
+    let sum=0,cnt=0;
+    for(let j=0;j<n;j++){
+      if(Math.abs(time_s[j]-t)<=windowSec/2 && pace[j]!=null && pace[j]<20){sum+=pace[j];cnt++;}
+    }
+    out.push(cnt>0?sum/cnt:null);
+  }
+  return out;
+}
+// Time-based smoothing: average HR over a window of seconds
+function smoothHRbyTime(hr, time_s, windowSec){
+  if(!hr||!time_s) return null;
+  const n=hr.length, out=[];
+  for(let i=0;i<n;i++){
+    const t=time_s[i];
+    let sum=0,cnt=0;
+    for(let j=0;j<n;j++){
+      if(Math.abs(time_s[j]-t)<=windowSec/2 && hr[j]>0){sum+=hr[j];cnt++;}
+    }
+    out.push(cnt>0?Math.round(sum/cnt):null);
+  }
+  return out;
+}
+function mileTicks(md){const t=[];for(let m=0;m<=Math.floor(md);m++)t.push(m);return t;}
+
+// OAUTH
+function startOAuth() {
+  const id=document.getElementById('client-id').value.trim();
+  const sec=document.getElementById('client-secret').value.trim();
+  if(!id||!sec){showErr('setup-err','Enter both fields.');return;}
+  sessionStorage.setItem('sc_id',id); sessionStorage.setItem('sc_sec',sec);
+  const redir=window.location.origin+window.location.pathname;
+  window.location.href=`https://www.strava.com/oauth/authorize?client_id=${id}&response_type=code&redirect_uri=${encodeURIComponent(redir)}&approval_prompt=force&scope=activity:read_all`;
+}
+async function doExchange(code) {
+  const id=sessionStorage.getItem('sc_id'), sec=sessionStorage.getItem('sc_sec');
+  dbg(`Token exchange: client=${id}, code=${code.slice(0,8)}...`);
+  const r=await fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:id,client_secret:sec,code,grant_type:'authorization_code'})});
+  const d=await r.json();
+  dbg(`Token resp: status=${r.status} has_token=${!!d.access_token}`);
+  if(!d.access_token) throw new Error(d.message||JSON.stringify(d.errors)||`HTTP ${r.status}`);
+  S.accessToken=d.access_token;
+}
+async function manualExchange() {
+  let code;
+  try{code=new URL(document.getElementById('manual-url').value.trim()).searchParams.get('code');}catch(e){}
+  if(!code){showErr('cb-err','No code found in URL.');return;}
+  try{await doExchange(code);window.history.replaceState({},'',window.location.pathname);showScreen('picker');fetchActivities();}
+  catch(e){showErr('cb-err',e.message);}
+}
+
+// FETCH ACTIVITIES
+async function fetchActivities() {
+  document.getElementById('load-acts').style.display='block';
+  document.getElementById('act-list').innerHTML='';
+  try {
+    let page=1,allRuns=[],total=0;
+    while(page<=10){
+      const r=await fetch(`https://www.strava.com/api/v3/athlete/activities?per_page=50&page=${page}`,{headers:{'Authorization':`Bearer ${S.accessToken}`}});
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const acts=await r.json();
+      if(!Array.isArray(acts)) throw new Error('Bad response');
+      total+=acts.length;
+      const runs=acts.filter(a=>{
+        return ['Run','VirtualRun','TrailRun'].includes(a.type)||(a.sport_type||'').toLowerCase().includes('run');
+      });
+      allRuns.push(...runs);
+      dbg(`Page ${page}: ${acts.length} acts, ${runs.length} runs`);
+      if(acts.length<50) break; page++;
+    }
+    dbg(`Done. ${total} total, ${allRuns.length} runs`);
+    document.getElementById('load-acts').style.display='none';
+    S.activities=allRuns;
+    if(!allRuns.length){document.getElementById('act-list').innerHTML=`<p style="color:var(--ink-muted);font-size:13px;padding:10px 0">No runs found.</p>`;return;}
+    filterAndRenderList();
+  } catch(e) {
+    dbg(`fetchActivities ERR: ${e.message}`);
+    document.getElementById('load-acts').style.display='none';
+    showErr('picker-err','Failed: '+e.message);
+  }
+}
+function renderList(acts) {
+  const list=document.getElementById('act-list');
+  list.innerHTML='';
+  acts.forEach(a=>{
+    const mi=(a.distance/1609.34).toFixed(2);
+    const date=new Date(a.start_date_local).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'});
+    const el=document.createElement('div');
+    el.className='activity-item'; el.dataset.id=a.id;
+    const wLabel=workoutLabel(a.workout_type);
+    const badge=wLabel?`<span class="wtype-badge">${wLabel}</span>`:'';
+    const hrFlag=a.has_heartrate?`<span class="hr-flag" title="Heart rate data">♥</span>`:'';
+    el.innerHTML=`<div class="act-left"><div class="check"></div><div><div class="act-name">${a.name} ${badge}${hrFlag}</div><div class="act-date">${date}</div></div></div><div class="act-stats"><div class="act-dist">${mi} mi</div><div class="act-time">${fmtTime(a.moving_time)}</div></div>`;
+    el.onclick=()=>toggleSel(a.id,el);
+    list.appendChild(el);
+    // Color race badges
+    el.querySelectorAll('.wtype-badge').forEach(b=>{ if(b.textContent==='Race') b.classList.add('wtype-race'); });
+  });
+}
+function toggleSel(id,el) {
+  if(S.selectedIds.has(id)){S.selectedIds.delete(id);el.classList.remove('selected');}
+  else{S.selectedIds.add(id);el.classList.add('selected');}
+  document.getElementById('btn-viz').style.display=S.selectedIds.size>0?'inline-flex':'none';
+}
+
+// LOAD STREAMS
+async function loadSelected() {
+  if(!S.selectedIds.size) return;
+  document.getElementById('load-streams').style.display='block';
+  document.getElementById('btn-viz').style.display='none';
+  hideErr('picker-err');
+  const ids=[...S.selectedIds], races=[];
+  for(let i=0;i<ids.length;i++){
+    const id=ids[i];
+    dbg(`Streams for ${id}...`);
+    const r=await fetch(`https://www.strava.com/api/v3/activities/${id}/streams?keys=distance,altitude,time,velocity_smooth,heartrate&key_by_type=true`,{headers:{'Authorization':`Bearer ${S.accessToken}`}});
+    if(!r.ok){showErr('picker-err',`HTTP ${r.status} for ${id}`);continue;}
+    const d=await r.json();
+    if(!d.distance){showErr('picker-err',`No data for ${id}`);continue;}
+    const act=S.activities.find(a=>a.id===id);
+    const n=d.distance.data.length;
+    const dist_mi=d.distance.data.map(x=>x/1609.34);
+    const alt_ft=d.altitude?d.altitude.data.map(x=>x*3.28084):null;
+    const vel=d.velocity_smooth?d.velocity_smooth.data:null;
+    const pace=vel?vel.map(v=>v>0.3?26.8224/v:null):null;
+    const hr=d.heartrate?d.heartrate.data:null;
+    const time_s=d.time.data;
+    const hrSmooth=smoothHRbyTime(hr,time_s,300);
+    const paceSmooth=smoothPaceByTime(pace,time_s,60); // 1-min rolling average for pace
+    races.push({act,dist_mi,alt_ft,pace:paceSmooth,hr:hrSmooth,time_s,n,color:COLORS[i%COLORS.length],workoutType:act.workout_type});
+    dbg(`  ${act.name}: ${n} points`);
+  }
+  document.getElementById('load-streams').style.display='none';
+  if(!races.length) return;
+  S.races=races;
+  S.maxDuration=Math.max(...races.map(r=>r.time_s[r.n-1]));
+  initViz();
+}
+
+// VIZ INIT
+function initViz() {
+  cancelAnimationFrame(S.rafId);
+  S.progress=0; S.playing=false;
+  document.getElementById('play-btn').textContent='Play';
+  document.getElementById('scrubber').value=0;
+  showScreen('viz');
+  if(S.races.length===1){
+    document.getElementById('v-name').textContent=S.races[0].act.name;
+    document.getElementById('v-date').textContent=new Date(S.races[0].act.start_date_local).toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  } else {
+    document.getElementById('v-name').textContent=`${S.races.length} Races`;
+    document.getElementById('v-date').textContent='';
+  }
+  const leg=document.getElementById('legend'); leg.innerHTML='';
+  S.races.forEach((r,i)=>{
+    const date=new Date(r.act.start_date_local).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const pill=document.createElement('div');
+    pill.className='race-pill'; pill.dataset.idx=i;
+    const wl=workoutLabel(r.workoutType);
+    const wbadge=wl?`<span class="wtype-badge wtype-pill">${wl}</span>`:'';
+    const hrflag=r.hr?`<span class="hr-flag" title="Heart rate data">♥</span>`:'';
+    pill.innerHTML=`<input type="color" class="color-pick" value="${r.color}" data-idx="${i}" title="Pick color"><span class="pill-name">${r.act.name}${wbadge}${hrflag} · ${date}</span><button class="eye-btn" data-idx="${i}" title="Hide/show">◉</button>`;
+    leg.appendChild(pill);
+  });
+  document.querySelectorAll('.color-pick').forEach(inp=>{
+    inp.addEventListener('input',e=>{
+      const idx=parseInt(e.target.dataset.idx);
+      S.races[idx].color=e.target.value;
+      drawCharts(); attachHover(); renderProgress(S.progress);
+    });
+  });
+  document.querySelectorAll('.wtype-badge').forEach(b=>{ if(b.textContent==='Race') b.classList.add('wtype-race'); });
+  document.querySelectorAll('.eye-btn').forEach(btn=>{
+    btn.addEventListener('click',e=>{
+      const idx=parseInt(btn.dataset.idx);
+      S.races[idx].hidden=!S.races[idx].hidden;
+      btn.textContent=S.races[idx].hidden?'○':'◉';
+      btn.style.opacity=S.races[idx].hidden?'0.35':'1';
+      btn.closest('.race-pill').style.opacity=S.races[idx].hidden?'0.45':'1';
+      drawCharts(); attachHover(); renderProgress(S.progress);
+    });
+  });
+  // Show HR card if any race has HR data
+  document.getElementById('hr-card').style.display = S.races.some(r=>r.hr) ? '' : 'none';
+  // Show pace/hr/elev stats only for single race
+  const single = S.races.length === 1;
+  document.querySelectorAll('.ls-single').forEach(el => el.style.display = single ? '' : 'none');
+  // Fix border-radius when some are hidden
+  const ls = document.querySelectorAll('#live-stats .ls:not([style*="display: none"])');
+  ls.forEach((el,i) => {
+    el.style.borderRadius = '';
+    if(i===0) el.style.borderRadius='11px 0 0 11px';
+    if(i===ls.length-1) el.style.borderRadius='0 11px 11px 0';
+    if(ls.length===1) el.style.borderRadius='11px';
+  });
+  setTimeout(()=>{drawCharts();attachHover();renderProgress(0);updateStats(0);},60);
+}
+
+// DRAW
+function svgW(id){return document.getElementById(id).getBoundingClientRect().width||800;}
+
+function mkPath(xs,ys){
+  let d='',go=false;
+  for(let i=0;i<xs.length;i++){
+    if(ys[i]==null){go=false;continue;}
+    d+=(go?'L':'M')+xs[i].toFixed(1)+','+ys[i].toFixed(1)+' '; go=true;
+  }
+  return d;
+}
+
+function drawCharts(){ drawElev(); drawPace(); drawHR(); }
+
+function drawElev(){
+  const W=svgW('esvg'), H=148, PL=46,PR=12,PT=8,PB=24;
+  const cw=W-PL-PR, ch=H-PT-PB;
+  let minA=Infinity,maxA=-Infinity;
+  S.races.forEach(r=>{if(r.alt_ft)r.alt_ft.forEach(a=>{if(a<minA)minA=a;if(a>maxA)maxA=a;});});
+  if(!isFinite(minA)){minA=0;maxA=100;}
+  const pad=(maxA-minA)*0.1||10;
+  const yMn=minA-pad, yMx=maxA+pad;
+  const maxD=Math.max(...S.races.map(r=>r.dist_mi[r.n-1]));
+  const xS=d=>PL+(d/maxD)*cw;
+  const yS=a=>PT+ch-((a-yMn)/(yMx-yMn))*ch;
+
+  let h=`<svg id="esvg" viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">`;
+  niceTicks(yMn,yMx,4).forEach(v=>{
+    const y=yS(v);
+    h+=`<line class="grid-line" x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}"/>`;
+    h+=`<text class="axis-text" x="${PL-5}" y="${y+3}" text-anchor="end">${Math.round(v)} ft</text>`;
+  });
+  mileTicks(maxD).forEach(m=>{h+=`<text class="axis-text" x="${xS(m)}" y="${H-5}" text-anchor="middle">${m} mi</text>`;});
+
+  S.races.forEach(r=>{
+    if(r.hidden||!r.alt_ft) return;
+    const xs=r.dist_mi.map(xS), ys=r.alt_ft.map(yS);
+    let area=`M${xs[0].toFixed(1)},${H-PB}`;
+    for(let i=0;i<r.n;i++) area+=` L${xs[i].toFixed(1)},${ys[i].toFixed(1)}`;
+    area+=` L${xs[r.n-1].toFixed(1)},${H-PB} Z`;
+    const uid=`ec${r.act.id}`;
+    // Grey base
+    h+=`<path d="${area}" fill="#e0ddd6" opacity="0.55"/>`;
+    h+=`<path d="${mkPath(xs,ys)}" fill="none" stroke="#c5c2bb" stroke-width="1.2"/>`;
+    // Colored progress overlay
+    h+=`<defs><clipPath id="${uid}"><rect id="${uid}r" x="${PL}" y="0" width="0" height="${H}"/></clipPath></defs>`;
+    h+=`<g clip-path="url(#${uid})"><path d="${area}" fill="${r.color}" opacity="0.22"/><path d="${mkPath(xs,ys)}" fill="none" stroke="${r.color}" stroke-width="2.2"/></g>`;
+    h+=`<circle id="re${r.act.id}" cx="${xs[0]}" cy="${ys[0]}" r="6" fill="${r.color}" stroke="white" stroke-width="2" style="filter:drop-shadow(0 0 5px ${r.color}99)"/>`;
+  });
+  h+=`<line id="evl" x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="#1c1c1c" stroke-width="1.5" stroke-dasharray="4 3" opacity="0"/>`;
+  h+='</svg>';
+  document.getElementById('esvg').outerHTML=h;
+}
+
+function drawPace(){
+  const W=svgW('psvg'), H=128, PL=46,PR=12,PT=8,PB=24;
+  const cw=W-PL-PR, ch=H-PT-PB;
+  let pMn=Infinity,pMx=-Infinity;
+  S.races.forEach(r=>{if(r.pace)r.pace.forEach(p=>{if(p&&p<20){if(p<pMn)pMn=p;if(p>pMx)pMx=p;}});});
+  if(!isFinite(pMn)){pMn=6;pMx=12;}
+  pMn=Math.max(pMn-0.5,0); pMx=pMx+0.5;
+  const maxD=Math.max(...S.races.map(r=>r.dist_mi[r.n-1]));
+  const xS=d=>PL+(d/maxD)*cw;
+  const yP=p=>PT+((p-pMn)/(pMx-pMn))*ch;
+
+  let h=`<svg id="psvg" viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">`;
+  niceTicks(pMn,pMx,4).forEach(v=>{
+    const y=yP(v);
+    h+=`<line class="grid-line" x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}"/>`;
+    h+=`<text class="axis-text" x="${PL-5}" y="${y+3}" text-anchor="end">${fmtPace(v)}</text>`;
+  });
+  mileTicks(maxD).forEach(m=>{h+=`<text class="axis-text" x="${xS(m)}" y="${H-5}" text-anchor="middle">${m}</text>`;});
+
+  S.races.forEach(r=>{
+    if(r.hidden) return;
+    const xs=r.dist_mi.map(xS);
+    const ys=r.pace?r.pace.map(p=>(p&&p<20)?yP(p):null):null;
+    if(ys){h+=`<path d="${mkPath(xs,ys)}" fill="none" stroke="${r.color}" stroke-width="1.2" opacity="0.1" stroke-linecap="round" stroke-linejoin="round"/>`;}
+    const uid=`pc${r.act.id}`;
+    h+=`<defs><clipPath id="${uid}"><rect id="${uid}r" x="${PL}" y="0" width="0" height="${H}"/></clipPath></defs>`;
+    if(ys){h+=`<g clip-path="url(#${uid})"><path d="${mkPath(xs,ys)}" fill="none" stroke="${r.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></g>`;}
+    const sy=ys&&ys[0]!=null?ys[0]:PT+ch/2;
+    h+=`<circle id="rp${r.act.id}" cx="${xs[0]}" cy="${sy}" r="5" fill="${r.color}" stroke="white" stroke-width="2" style="filter:drop-shadow(0 0 4px ${r.color}99)"/>`;
+  });
+  h+=`<line id="pvl" x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="#1c1c1c" stroke-width="1.5" stroke-dasharray="4 3" opacity="0"/>`;
+  h+='</svg>';
+  document.getElementById('psvg').outerHTML=h;
+}
+
+function drawHR(){
+  const el=document.getElementById('hrsvg'); if(!el) return;
+  const hasHR=S.races.some(r=>r.hr); if(!hasHR) return;
+  const W=svgW('hrsvg'), H=110, PL=46,PR=12,PT=8,PB=24;
+  const cw=W-PL-PR, ch=H-PT-PB;
+  let hrMn=Infinity,hrMx=-Infinity;
+  S.races.forEach(r=>{if(r.hr)r.hr.forEach(h=>{if(h&&h>0){if(h<hrMn)hrMn=h;if(h>hrMx)hrMx=h;}});});
+  if(!isFinite(hrMn)){hrMn=120;hrMx=200;}
+  hrMn=hrMn-5; hrMx=hrMx+5;
+  const maxD=Math.max(...S.races.map(r=>r.dist_mi[r.n-1]));
+  const xS=d=>PL+(d/maxD)*cw;
+  const yH=h=>PT+ch-((h-hrMn)/(hrMx-hrMn))*ch;
+
+  let h=`<svg id="hrsvg" viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">`;
+  niceTicks(hrMn,hrMx,4).forEach(v=>{
+    const y=yH(v);
+    h+=`<line class="grid-line" x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}"/>`;
+    h+=`<text class="axis-text" x="${PL-5}" y="${y+3}" text-anchor="end">${Math.round(v)}</text>`;
+  });
+  mileTicks(maxD).forEach(m=>{h+=`<text class="axis-text" x="${xS(m)}" y="${H-5}" text-anchor="middle">${m}</text>`;});
+
+  S.races.forEach(r=>{
+    if(r.hidden||!r.hr) return;
+    const xs=r.dist_mi.map(xS);
+    const ys=r.hr.map(v=>v&&v>0?yH(v):null);
+    // Ghost full course
+    h+=`<path d="${mkPath(xs,ys)}" fill="none" stroke="${r.color}" stroke-width="1.2" opacity="0.12" stroke-linecap="round"/>`;
+    // Progress clip
+    const uid=`hrc${r.act.id}`;
+    h+=`<defs><clipPath id="${uid}"><rect id="${uid}r" x="${PL}" y="0" width="0" height="${H}"/></clipPath></defs>`;
+    h+=`<g clip-path="url(#${uid})"><path d="${mkPath(xs,ys)}" fill="none" stroke="${r.color}" stroke-width="2.2" stroke-linecap="round"/></g>`;
+    const sy=ys[0]!=null?ys[0]:PT+ch/2;
+    h+=`<circle id="rhr${r.act.id}" cx="${xs[0]}" cy="${sy}" r="5" fill="${r.color}" stroke="white" stroke-width="2" style="filter:drop-shadow(0 0 4px ${r.color}99)"/>`;
+  });
+  h+=`<line id="hrvl" x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="#1c1c1c" stroke-width="1.5" stroke-dasharray="4 3" opacity="0"/>`;
+  h+='</svg>';
+  document.getElementById('hrsvg').outerHTML=h;
+}
+
+// HOVER
+function syncCrosshair(frac){
+  // Move all three vlines to the same fractional position
+  if(frac===null){
+    ['evl','pvl','hrvl'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.setAttribute('opacity','0');
+    });
+    return;
+  }
+  const eSVG=document.getElementById('esvg'), pSVG=document.getElementById('psvg');
+  if(!eSVG||!pSVG) return;
+  const PL=46,PR=12;
+  const eW=eSVG.getBoundingClientRect().width||800;
+  const pW=pSVG.getBoundingClientRect().width||800;
+  const xE=PL+frac*(eW-PL-PR);
+  const xP=PL+frac*(pW-PL-PR);
+  const evl=document.getElementById('evl'),pvl=document.getElementById('pvl'),hrvl=document.getElementById('hrvl');
+  if(evl){evl.setAttribute('x1',xE);evl.setAttribute('x2',xE);evl.setAttribute('opacity','0.35');}
+  if(pvl){pvl.setAttribute('x1',xP);pvl.setAttribute('x2',xP);pvl.setAttribute('opacity','0.35');}
+  if(hrvl){hrvl.setAttribute('x1',xP);hrvl.setAttribute('x2',xP);hrvl.setAttribute('opacity','0.35');}
+}
+
+function attachHover(){
+  const tip=document.getElementById('tip');
+
+  function buildTooltip(svgId, mx, clientX, clientY){
+    const el=document.getElementById(svgId); if(!el) return;
+    const rect=el.getBoundingClientRect(), PL=46, PR=12, cw=rect.width-PL-PR;
+    if(mx<PL||mx>rect.width-PR){tip.style.display='none'; syncCrosshair(null); return;}
+    const frac=(mx-PL)/cw;
+    const visible=S.races.filter(r=>!r.hidden);
+    if(!visible.length){tip.style.display='none';return;}
+    // Sync all vlines to hovered position
+    syncCrosshair(frac);
+    // Use first visible race for distance reference
+    const r0=visible[0];
+    const i0=Math.max(0,Math.min(Math.round(frac*(r0.n-1)),r0.n-1));
+    const distMi=r0.dist_mi[i0].toFixed(2);
+    tip.style.display='block';
+    tip.style.left=(clientX+14)+'px';
+    tip.style.top=(clientY-10)+'px';
+    document.getElementById('tip-mi').textContent=distMi+' mi';
+    // Build per-race rows
+    const isElev=svgId==='esvg', isPace=svgId==='psvg', isHR=svgId==='hrsvg';
+    let rows='';
+    visible.forEach(r=>{
+      // find closest idx by distance fraction
+      const targetDist=frac*r.dist_mi[r.n-1];
+      let idx=r.n-1;
+      for(let j=0;j<r.n;j++){if(r.dist_mi[j]>=targetDist){idx=j;break;}}
+      const dot=`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${r.color};margin-right:5px;flex-shrink:0"></span>`;
+      const name=r.act.name.length>18?r.act.name.slice(0,17)+'…':r.act.name;
+      let val='—';
+      if(isElev) val=r.alt_ft?Math.round(r.alt_ft[idx])+' ft':'—';
+      if(isPace) val=r.pace&&r.pace[idx]&&r.pace[idx]<20?fmtPace(r.pace[idx])+'/mi':'—';
+      if(isHR)   val=r.hr&&r.hr[idx]>0?r.hr[idx]+' bpm':'—';
+      rows+=`<div class="tip-row">${dot}<span class="tip-lbl" style="flex:1">${name}</span><span style="font-weight:500">${val}</span></div>`;
+    });
+    document.getElementById('tip-body').innerHTML=rows;
+  }
+
+  ['esvg','psvg','hrsvg'].forEach(id=>{
+    // use event delegation since svgs get replaced
+    const card=document.querySelector('.chart-card:has(#'+id+')') || document.getElementById(id)?.closest('.chart-card');
+  });
+
+  // Attach directly to chart cards via mousemove (re-attach after each draw)
+  document.querySelectorAll('.chart-card').forEach(card=>{
+    card.addEventListener('mousemove',e=>{
+      const svg=card.querySelector('svg'); if(!svg) return;
+      const rect=svg.getBoundingClientRect();
+      const mx=e.clientX-rect.left;
+      buildTooltip(svg.id, mx, e.clientX, e.clientY);
+    });
+    card.addEventListener('mouseleave',()=>{
+      tip.style.display='none';
+      // Restore crosshair to playhead position if playing, else hide
+      if(!S.playing && S.progress===0) syncCrosshair(null);
+    });
+    card.addEventListener('click',e=>{
+      const svg=card.querySelector('svg'); if(!svg) return;
+      const rect=svg.getBoundingClientRect(), PL=46,PR=12,cw=rect.width-PL-PR;
+      const mx=e.clientX-rect.left;
+      if(mx<PL||mx>rect.width-PR) return;
+      S.progress=Math.max(0,Math.min((mx-PL)/cw,1));
+      document.getElementById('scrubber').value=Math.round(S.progress*1000);
+      const visible=S.races.filter(r=>!r.hidden);
+      if(visible.length){renderProgress(S.progress);updateStats(Math.round(S.progress*(visible[0].n-1)));}
+    });
+  });
+}
+
+// ANIMATION
+function togglePlay(){
+  S.playing=!S.playing;
+  document.getElementById('play-btn').textContent=S.playing?'Pause':'Play';
+  if(S.playing){if(S.progress>=1)S.progress=0;S.lastTs=null;S.rafId=requestAnimationFrame(af);}
+  else cancelAnimationFrame(S.rafId);
+}
+function af(ts){
+  if(!S.lastTs)S.lastTs=ts;
+  const dt=(ts-S.lastTs)/1000; S.lastTs=ts;
+  S.progress+=dt*S.speed/S.maxDuration;
+  if(S.progress>=1){S.progress=1;S.playing=false;document.getElementById('play-btn').textContent='Play';}
+  document.getElementById('scrubber').value=Math.round(S.progress*1000);
+  const vis=S.races.filter(r=>!r.hidden); renderProgress(S.progress); if(vis.length) updateStats(Math.round(S.progress*(vis[0].n-1)));
+  if(S.playing) S.rafId=requestAnimationFrame(af);
+}
+function resetAnim(){
+  S.playing=false; cancelAnimationFrame(S.rafId); S.progress=0;
+  document.getElementById('play-btn').textContent='Play';
+  document.getElementById('scrubber').value=0;
+  renderProgress(0); updateStats(0);
+}
+function onScrub(v){S.progress=v/1000;renderProgress(S.progress);const vis=S.races.filter(r=>!r.hidden);if(vis.length)updateStats(Math.round(S.progress*(vis[0].n-1)));}
+function onSpeed(v){S.speed=parseFloat(v);document.getElementById('speed-v').textContent=S.speed+'×';}
+
+// RENDER PROGRESS
+function renderProgress(frac){
+  const eSVG=document.getElementById('esvg'), pSVG=document.getElementById('psvg');
+  if(!eSVG||!pSVG) return;
+  const eW=eSVG.getBoundingClientRect().width||800, pW=pSVG.getBoundingClientRect().width||800;
+  const PL=46,PR=12,PT=8, eH=148,ePB=24,eCH=eH-PT-ePB, pH=128,pPB=24,pCH=pH-PT-pPB;
+  const maxD=Math.max(...S.races.filter(r=>!r.hidden).map(r=>r.dist_mi[r.n-1]));
+  const ecw=eW-PL-PR, pcw=pW-PL-PR;
+
+  // Global alt extent — must match drawElev exactly
+  let gMnA=Infinity,gMxA=-Infinity;
+  S.races.forEach(r=>{if(!r.hidden&&r.alt_ft)r.alt_ft.forEach(a=>{if(a<gMnA)gMnA=a;if(a>gMxA)gMxA=a;});});
+  if(!isFinite(gMnA)){gMnA=0;gMxA=100;}
+  const gPad=(gMxA-gMnA)*0.1||10;
+  const gYMn=gMnA-gPad, gYMx=gMxA+gPad;
+
+  // Global pace extent — must match drawPace exactly
+  let gPMn=Infinity,gPMx=-Infinity;
+  S.races.forEach(r=>{if(!r.hidden&&r.pace)r.pace.forEach(p=>{if(p&&p<20){if(p<gPMn)gPMn=p;if(p>gPMx)gPMx=p;}});});
+  if(!isFinite(gPMn)){gPMn=6;gPMx=12;}
+  gPMn=Math.max(gPMn-0.5,0); gPMx=gPMx+0.5;
+
+  // Global HR extent — must match drawHR exactly
+  let gHMn=Infinity,gHMx=-Infinity;
+  S.races.forEach(r=>{if(!r.hidden&&r.hr)r.hr.forEach(h=>{if(h&&h>0){if(h<gHMn)gHMn=h;if(h>gHMx)gHMx=h;}});});
+  if(!isFinite(gHMn)){gHMn=120;gHMx=200;}
+  gHMn=gHMn-5; gHMx=gHMx+5;
+
+  S.races.forEach(r=>{
+    if(r.hidden) return;
+    // Find idx by time
+    const tgt=frac*S.maxDuration;
+    let idx=r.n-1;
+    for(let i=0;i<r.n;i++){if(r.time_s[i]>=tgt){idx=i;break;}}
+    const dFrac=r.dist_mi[idx]/maxD;
+
+    // Clip
+    const er=document.getElementById(`ec${r.act.id}r`);
+    const pr=document.getElementById(`pc${r.act.id}r`);
+    if(er) er.setAttribute('width',dFrac*ecw);
+    if(pr) pr.setAttribute('width',dFrac*pcw);
+    // HR chart clip + dot
+    const hrcr=document.getElementById(`hrc${r.act.id}r`);
+    if(hrcr) hrcr.setAttribute('width',dFrac*pcw);
+    if(r.hr){
+      const hrSVG=document.getElementById('hrsvg');
+      if(hrSVG){
+        const hW=hrSVG.getBoundingClientRect().width||800, hCW=hW-PL-PR;
+        const xHR=PL+(r.dist_mi[idx]/maxD)*hCW;
+        const hH=110, hPB=24, hCH=hH-PT-hPB;
+        const yHR=r.hr[idx]&&r.hr[idx]>0?PT+hCH-((r.hr[idx]-gHMn)/(gHMx-gHMn))*hCH:PT+hCH/2;
+        const rhr=document.getElementById(`rhr${r.act.id}`);
+        if(rhr){rhr.setAttribute('cx',xHR);rhr.setAttribute('cy',yHR);}
+      }
+    }
+
+    // Elev dot — use global extent (same as drawElev)
+    const xE=PL+(r.dist_mi[idx]/maxD)*ecw;
+    const yE=r.alt_ft?PT+eCH-((r.alt_ft[idx]-gYMn)/(gYMx-gYMn))*eCH:PT+eCH/2;
+    const re=document.getElementById(`re${r.act.id}`);
+    if(re){re.setAttribute('cx',xE);re.setAttribute('cy',yE);}
+
+    // Pace dot — use global scale matching drawPace
+    const xP=PL+(r.dist_mi[idx]/maxD)*pcw;
+    const yP2=r.pace&&r.pace[idx]&&r.pace[idx]<20?PT+((r.pace[idx]-gPMn)/(gPMx-gPMn))*pCH:PT+pCH/2;
+    const rp=document.getElementById(`rp${r.act.id}`);
+    if(rp){rp.setAttribute('cx',xP);rp.setAttribute('cy',yP2);}
+  });
+
+  // Vlines from first race
+  const r0=S.races[0], i0=Math.round(frac*(r0.n-1));
+  const xE0=PL+(r0.dist_mi[i0]/maxD)*ecw, xP0=PL+(r0.dist_mi[i0]/maxD)*pcw;
+  const evl=document.getElementById('evl'), pvl=document.getElementById('pvl'), hrvl=document.getElementById('hrvl');
+  const vlOp=frac>0?'0.35':'0';
+  if(evl){evl.setAttribute('x1',xE0);evl.setAttribute('x2',xE0);evl.setAttribute('opacity',vlOp);}
+  if(pvl){pvl.setAttribute('x1',xP0);pvl.setAttribute('x2',xP0);pvl.setAttribute('opacity',vlOp);}
+  if(hrvl){hrvl.setAttribute('x1',xP0);hrvl.setAttribute('x2',xP0);hrvl.setAttribute('opacity',vlOp);}
+
+  // ── Crosshair bar ────────────────────────────────────────────────────────────
+  const bar=document.getElementById('crosshair-bar');
+  const xhRows=document.getElementById('xh-rows');
+  const xhDist=document.getElementById('xh-dist');
+  if(frac>0 && S.races.some(r=>!r.hidden)){
+    bar.style.display='flex';
+    // Distance label from first visible race
+    const visR=S.races.filter(r=>!r.hidden);
+    const r0=visR[0];
+    const tgt0=frac*S.maxDuration;
+    let i0=r0.n-1; for(let j=0;j<r0.n;j++){if(r0.time_s[j]>=tgt0){i0=j;break;}}
+    xhDist.textContent=r0.dist_mi[i0].toFixed(2)+' mi  ·  '+fmtTime(r0.time_s[i0]);
+    // Per-race values
+    let rowsHTML='';
+    visR.forEach(r=>{
+      const tgt=frac*S.maxDuration;
+      let idx=r.n-1; for(let j=0;j<r.n;j++){if(r.time_s[j]>=tgt){idx=j;break;}}
+      const pace=r.pace&&r.pace[idx]&&r.pace[idx]<20?fmtPace(r.pace[idx])+'/mi':'—';
+      const hr=r.hr&&r.hr[idx]>0?r.hr[idx]+' bpm':'—';
+      const elev=r.alt_ft?Math.round(r.alt_ft[idx])+' ft':'—';
+      const name=r.act.name.length>16?r.act.name.slice(0,15)+'…':r.act.name;
+      rowsHTML+=`<div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;white-space:nowrap">
+        <span style="width:8px;height:8px;border-radius:50%;background:${r.color};display:inline-block;flex-shrink:0"></span>
+        <span style="color:var(--ink-muted);min-width:90px">${name}</span>
+        <span style="color:var(--accent);min-width:52px">${pace}</span>
+        ${r.hr?`<span style="color:#c0392b;min-width:55px">${hr}</span>`:''}
+        <span style="color:var(--ink-muted)">${elev}</span>
+      </div>`;
+    });
+    xhRows.innerHTML=rowsHTML;
+  } else {
+    bar.style.display='none';
+  }
+}
+
+function updateStats(idx){
+  const visible=S.races.filter(r=>!r.hidden);
+  if(!visible.length) return;
+  const r=visible[0], i=Math.max(0,Math.min(idx,r.n-1));
+  document.getElementById('ls-time').textContent=fmtTime(r.time_s[i]);
+  document.getElementById('ls-dist').innerHTML=`${r.dist_mi[i].toFixed(2)}<span style="font-size:11px;color:var(--ink-muted)"> mi</span>`;
+  document.getElementById('ls-elev').innerHTML=r.alt_ft?`${Math.round(r.alt_ft[i])}<span style="font-size:11px;color:var(--ink-muted)"> ft</span>`:'—';
+  document.getElementById('ls-pace').textContent=r.pace&&r.pace[i]&&r.pace[i]<20?fmtPace(r.pace[i]):'—';
+  document.getElementById('ls-hr').innerHTML=r.hr&&r.hr[i]>0?`${r.hr[i]}<span style="font-size:11px;color:var(--ink-muted)"> bpm</span>`:'—';
+}
+
+let rszT;
+window.addEventListener('resize',()=>{clearTimeout(rszT);rszT=setTimeout(()=>{if(document.getElementById('viz-screen').style.display!=='none'&&S.races.length){drawCharts();attachHover();renderProgress(S.progress);}},150);});
+
+// INIT
+window.addEventListener('load',async()=>{
+  const p=new URLSearchParams(window.location.search);
+  const code=p.get('code'), err=p.get('error');
+  const sid=sessionStorage.getItem('sc_id'), ssec=sessionStorage.getItem('sc_sec');
+  dbg(`Load: code=${code?'✓':'none'} err=${err||'none'} id=${sid||'none'} sec=${ssec?'✓':'none'}`);
+  if(sid) document.getElementById('client-id').value=sid;
+  if(ssec) document.getElementById('client-secret').value=ssec;
+  if(err){showScreen('setup');showErr('setup-err','Strava error: '+err);return;}
+  if(code&&sid&&ssec){
+    showScreen('callback');
+    window.history.replaceState({},'',window.location.pathname);
+    try{await doExchange(code);showScreen('picker');fetchActivities();}
+    catch(e){
+      dbg('Exchange failed: '+e.message);
+      document.getElementById('cb-msg').textContent='Auto-auth failed. Paste the redirect URL:';
+      document.getElementById('manual-row').style.display='flex';
+      showErr('cb-err',e.message);
+    }
+  } else if(code&&(!sid||!ssec)){
+    showScreen('callback');
+    document.getElementById('cb-msg').textContent='Session lost. Paste the redirect URL below:';
+    document.getElementById('manual-url').value=window.location.href;
+    document.getElementById('manual-row').style.display='flex';
+    window.history.replaceState({},'',window.location.pathname);
+  } else {
+    showScreen('setup');
+  }
+});
+</script>
+</body>
+</html>

@@ -787,6 +787,8 @@ function drawAE(){
   S.races.forEach(r=>{if(!r.hidden&&r.ae)r.ae.forEach(v=>{if(v&&v>0){if(v<aeMn)aeMn=v;if(v>aeMx)aeMx=v;}});});
   if(!isFinite(aeMn)){aeMn=1;aeMx=5;}
   aeMn=Math.max(0,aeMn-0.2); aeMx=aeMx+0.2;
+  // Store on S so renderProgress uses same scale
+  S.aeScaleMin=aeMn; S.aeScaleMax=aeMx;
   const maxD=Math.max(...S.races.filter(r=>!r.hidden).map(r=>r.dist_mi[r.n-1]));
   const xS=d=>PL+(d/maxD)*cw;
   const yA=v=>PT+ch-((v-aeMn)/(aeMx-aeMn))*ch;
@@ -834,22 +836,6 @@ function renderAEBars(){
       <div class="ae-bar-val" style="color:${s.color}">${s.score.toFixed(2)}</div>
       <div style="font-family:var(--mono);font-size:9px;color:var(--ink-muted);margin-left:4px">${s.date}</div>
     </div>`).join('');
-}
-
-// AE dot render — called from renderProgress
-function renderAEDot(r, idx, maxD, pcw, PL, PT){
-  const aecr=document.getElementById(`aec${r.act.id}r`);
-  const dFrac=r.dist_mi[idx]/maxD;
-  if(aecr) aecr.setAttribute('width', dFrac*pcw);
-  if(!r.ae) return;
-  const aeSVG=document.getElementById('aesvg'); if(!aeSVG) return;
-  const aW=aeSVG.getBoundingClientRect().width||800, aCW=aW-PL-12;
-  const xAE=PL+(r.dist_mi[idx]/maxD)*aCW;
-  // Use global AE extent (gAEMn/gAEMx set in renderProgress)
-  const aH=110, aPB=24, aCH=aH-PT-aPB;
-  const yAE=r.ae[idx]&&r.ae[idx]>0?PT+aCH-((r.ae[idx]-window._gAEMn)/(window._gAEMx-window._gAEMn))*aCH:PT+aCH/2;
-  const rae=document.getElementById(`rae${r.act.id}`);
-  if(rae){rae.setAttribute('cx',xAE);rae.setAttribute('cy',yAE);}
 }
 
 // HOVER
@@ -996,12 +982,8 @@ function renderProgress(frac){
   S.races.forEach(r=>{if(!r.hidden&&r.hr)r.hr.forEach(h=>{if(h&&h>0){if(h<gHMn)gHMn=h;if(h>gHMx)gHMx=h;}});});
   if(!isFinite(gHMn)){gHMn=120;gHMx=200;}
   gHMn=gHMn-5; gHMx=gHMx+5;
-  // Global AE extent — must match drawAE exactly
-  let gAEMn=Infinity,gAEMx=-Infinity;
-  S.races.forEach(r=>{if(!r.hidden&&r.ae)r.ae.forEach(v=>{if(v&&v>0){if(v<gAEMn)gAEMn=v;if(v>gAEMx)gAEMx=v;}});});
-  if(!isFinite(gAEMn)){gAEMn=1;gAEMx=5;}
-  gAEMn=Math.max(0,gAEMn-0.2); gAEMx=gAEMx+0.2;
-  window._gAEMn=gAEMn; window._gAEMx=gAEMx;
+  // AE scale — use same values computed by drawAE
+  const gAEMn=S.aeScaleMin||1, gAEMx=S.aeScaleMax||5;
 
   S.races.forEach(r=>{
     if(r.hidden) return;
@@ -1042,6 +1024,23 @@ function renderProgress(frac){
     const yP2=r.pace&&r.pace[idx]&&r.pace[idx]<20?PT+((r.pace[idx]-gPMn)/(gPMx-gPMn))*pCH:PT+pCH/2;
     const rp=document.getElementById(`rp${r.act.id}`);
     if(rp){rp.setAttribute('cx',xP);rp.setAttribute('cy',yP2);}
+
+    // AE clip + dot — use global scale matching drawAE
+    const aecr=document.getElementById(`aec${r.act.id}r`);
+    if(aecr) aecr.setAttribute('width', dFrac*pcw);
+    if(r.ae){
+      const aeSVG=document.getElementById('aesvg');
+      if(aeSVG){
+        const aW=aeSVG.getBoundingClientRect().width||800;
+        const aCW=aW-PL-PR, aH=110, aPB=24, aCH=aH-PT-aPB;
+        const xAE=PL+(r.dist_mi[idx]/maxD)*aCW;
+        const yAE=r.ae[idx]&&r.ae[idx]>0
+          ? PT+aCH-((r.ae[idx]-gAEMn)/(gAEMx-gAEMn))*aCH
+          : PT+aCH/2;
+        const rae=document.getElementById(`rae${r.act.id}`);
+        if(rae){rae.setAttribute('cx',xAE);rae.setAttribute('cy',yAE);}
+      }
+    }
   });
 
   // Vlines from first race

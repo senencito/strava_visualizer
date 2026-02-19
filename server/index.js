@@ -8,6 +8,7 @@ const fetch        = require('node-fetch');
 const path         = require('path');
 const { pool, query, queryOne, initDB } = require('../db/client');
 const { syncActivities, getStreams, stravaFetch } = require('./strava');
+const { importRace, lookupBib, fmtTime } = require('./sporthive');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -215,6 +216,107 @@ app.get('/api/streams/:activityId', requireAuth, async (req, res) => {
     console.error('Streams error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+
+// ── Admin page ────────────────────────────────────────────────────────────────
+app.get('/admin', (req, res) => {
+  // Simple password protection via env var
+  const adminPass = process.env.ADMIN_PASSWORD;
+  const provided  = req.query.pass;
+  if (adminPass && provided !== adminPass) {
+    return res.status(401).send('Unauthorized — add ?pass=YOUR_ADMIN_PASSWORD to the URL');
+  }
+  res.sendFile(require('path').join(__dirname, '../public/admin.html'));
+});
+
+// ── Race import (admin only) ───────────────────────────────────────────────────
+app.post('/api/admin/import-race', async (req, res) => {
+  const adminPass = process.env.ADMIN_PASSWORD;
+  if (adminPass && req.headers['x-admin-password'] !== adminPass) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const { url, event_name, race_name, event_date, distance_m, location, replace } = req.body;
+  if (!url) return res.status(400).json({ error: 'url is required' });
+  try {
+    const result = await importRace({ url, eventName: event_name, raceName: race_name, eventDate: event_date, distanceM: distance_m, location, replace });
+    res.json(result);
+  } catch(err) {
+    console.error('Import race error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── List all imported races ────────────────────────────────────────────────────
+app.get('/api/races', async (req, res) => {
+  const rows = await query(`
+    SELECT id, sporthive_event_id, sporthive_race_id,
+           event_name, race_name, event_date, distance_m,
+           location, total_finishers, imported_at
+    FROM race_events
+    ORDER BY event_date DESC NULLS LAST, imported_at DESC
+  `);
+  res.json(rows);
+});
+
+// ── Get all finishers for a race (paginated) ──────────────────────────────────
+app.get('/api/races/:id/finishers', async (req, res) => {
+  const { age_group, gender, page = 0, per_page = 100 } = req.query;
+  const offset = parseInt(page) * parseInt(per_page);
+  let sql = `SELECT * FROM race_finishers WHERE race_event_id=$1`;
+  const params = [req.params.id];
+  if (age_group) { sql += ` AND age_group=$${params.length+1}`; params.push(age_group); }
+  if (gender)    { sql += ` AND gender=$${params.length+1}`;    params.push(gender); }
+  sql += ` ORDER BY overall_rank ASC LIMIT $${params.length+1} OFFSET $${params.length+2}`;
+  params.push(per_page, offset);
+  const rows = await query(sql, params);
+  res.json(rows);
+});
+
+// ── Look up a bib in a race ────────────────────────────────────────────────────
+app.get('/api/races/:id/bib/:bib', async (req, res) => {
+  try {
+    const result = await lookupBib(req.params.id, req.params.bib);
+    if (!result) return res.status(404).json({ error: 'Bib not found' });
+    res.json(result);
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Age group breakdown for a race ────────────────────────────────────────────
+app.get('/api/races/:id/stats', async (req, res) => {
+  const groups = await query(`
+    SELECT age_group, gender, COUNT(*) as n,
+           MIN(chip_time_s) as fastest_s,
+           AVG(chip_time_s)::int as avg_s,
+           PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY chip_time_s)::int as median_s
+    FROM race_finishers
+    WHERE race_event_id=$1 AND chip_time_s IS NOT NULL
+    GROUP BY age_group, gender
+    ORDER BY age_group, gender
+  `, [req.params.id]);
+  res.json(groups);
+});
+
+// ── Claim a result (link bib to logged-in athlete) ────────────────────────────
+app.post('/api/races/:id/claim', requireAuth, async (req, res) => {
+  const { bib } = req.body;
+  if (!bib) return res.status(400).json({ error: 'bib required' });
+  // Verify bib exists
+  const finisher = await queryOne(
+    `SELECT id FROM race_finishers WHERE race_event_id=$1 AND bib=$2`,
+    [req.params.id, bib]
+  );
+  if (!finisher) return res.status(404).json({ error: 'Bib not found in this race' });
+  // Link to athlete
+  await query(
+    `UPDATE race_finishers SET athlete_id=$1 WHERE id=$2`,
+    [req.session.athleteId, finisher.id]
+  );
+  // Return full result with percentiles
+  const result = await lookupBib(req.params.id, bib);
+  res.json(result);
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────

@@ -39,6 +39,36 @@ function requireAuth(req, res, next) {
   next();
 }
 
+// HTTP Basic Auth for admin routes — browser shows native login dialog
+function requireAdmin(req, res, next) {
+  const adminUser = process.env.ADMIN_USER || 'admin';
+  const adminPass = process.env.ADMIN_PASSWORD;
+
+  if (!adminPass) {
+    // No password set — block access entirely in production
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).send('Admin access disabled — set ADMIN_PASSWORD env var');
+    }
+    return next(); // dev mode: allow without auth
+  }
+
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Basic ')) {
+    res.set('WWW-Authenticate', 'Basic realm="Senén Admin"');
+    return res.status(401).send('Authentication required');
+  }
+
+  const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf8');
+  const [user, pass] = decoded.split(':');
+
+  if (user !== adminUser || pass !== adminPass) {
+    res.set('WWW-Authenticate', 'Basic realm="Senén Admin"');
+    return res.status(401).send('Invalid credentials');
+  }
+
+  next();
+}
+
 async function getAthlete(req) {
   return queryOne(`SELECT * FROM athletes WHERE strava_id=$1`, [req.session.athleteId]);
 }
@@ -220,22 +250,12 @@ app.get('/api/streams/:activityId', requireAuth, async (req, res) => {
 
 
 // ── Admin page ────────────────────────────────────────────────────────────────
-app.get('/admin', (req, res) => {
-  // Simple password protection via env var
-  const adminPass = process.env.ADMIN_PASSWORD;
-  const provided  = req.query.pass;
-  if (adminPass && provided !== adminPass) {
-    return res.status(401).send('Unauthorized — add ?pass=YOUR_ADMIN_PASSWORD to the URL');
-  }
+app.get('/admin', requireAdmin, (req, res) => {
   res.sendFile(require('path').join(__dirname, '../public/admin.html'));
 });
 
 // ── Race import (admin only) ───────────────────────────────────────────────────
-app.post('/api/admin/import-race', async (req, res) => {
-  const adminPass = process.env.ADMIN_PASSWORD;
-  if (adminPass && req.headers['x-admin-password'] !== adminPass) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.post('/api/admin/import-race', requireAdmin, async (req, res) => {
   const { url, event_name, race_name, event_date, distance_m, location, replace } = req.body;
   if (!url) return res.status(400).json({ error: 'url is required' });
   try {

@@ -101,6 +101,17 @@
       <input type="url" id="f-url" placeholder="https://results.sporthive.com/events/7421030582090460416/races/3">
       <div class="field-hint">Paste any URL from results.sporthive.com — the event and race IDs are extracted automatically</div>
     </div>
+
+    <!-- Race picker — shown when URL has no race ID -->
+    <div id="race-picker" style="display:none;margin-bottom:16px">
+      <div class="field">
+        <label>Select Race</label>
+        <select class="filter-select" id="f-race-select" style="width:100%;padding:10px 13px;border:1.5px solid var(--grid);border-radius:9px;font-family:var(--sans);font-size:13px;background:var(--bg);color:var(--ink);outline:none" onchange="onRaceSelect()">
+          <option value="">— Pick a race —</option>
+        </select>
+        <div class="field-hint" id="race-picker-hint"></div>
+      </div>
+    </div>
     <div class="field-row">
       <div class="field">
         <label>Event Name *</label>
@@ -197,6 +208,51 @@ function fmtTime(s) {
     : `${m}:${String(sec).padStart(2,'0')}`;
 }
 
+// ── Fetch races when URL loses focus ─────────────────────────────────────────
+let selectedRaceId = null;
+
+document.getElementById('f-url').addEventListener('blur', async () => {
+  const url = document.getElementById('f-url').value.trim();
+  if (!url) return;
+  // Only look up races if URL has no /races/ segment
+  if (url.includes('/races/')) { selectedRaceId = null; hidePicker(); return; }
+
+  try {
+    const res = await fetch('/api/admin/import-race', {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ url, event_name: '_probe_' }),
+    });
+    const d = await res.json();
+    if (d.needs_race_selection && d.races?.length) {
+      showRacePicker(d.races);
+    }
+  } catch(e) { /* silently ignore probe errors */ }
+});
+
+function showRacePicker(races) {
+  const sel = document.getElementById('f-race-select');
+  while (sel.options.length > 1) sel.remove(1);
+  races.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.name + (r.participants ? ` (${r.participants} finishers)` : '') + (r.distance ? ` · ${(r.distance/1000).toFixed(1)}km` : '');
+    sel.appendChild(opt);
+  });
+  document.getElementById('race-picker').style.display = 'block';
+  document.getElementById('race-picker-hint').textContent = `${races.length} race${races.length>1?'s':''} found in this event`;
+  selectedRaceId = null;
+}
+
+function hidePicker() {
+  document.getElementById('race-picker').style.display = 'none';
+  selectedRaceId = null;
+}
+
+function onRaceSelect() {
+  selectedRaceId = document.getElementById('f-race-select').value || null;
+}
+
 // ── Import race ───────────────────────────────────────────────────────────────
 async function importRace() {
   const url      = document.getElementById('f-url').value.trim();
@@ -227,6 +283,7 @@ async function importRace() {
       headers: authHeaders,
       body: JSON.stringify({
         url, event_name: name, race_name: raceName || null,
+        race_id: selectedRaceId || null,
         event_date: date || null,
         distance_m: dist ? parseFloat(dist) : null,
         location: location || null,
@@ -239,6 +296,13 @@ async function importRace() {
     if (!res.ok) {
       log(`ERROR: ${d.error}`, 'err');
       status.textContent = '❌ Failed';
+      return;
+    }
+
+    if (d.needs_race_selection) {
+      log(`Event has ${d.races?.length} races — please select one from the dropdown above`, 'err');
+      if (d.races?.length) showRacePicker(d.races);
+      status.textContent = 'Select a race first';
       return;
     }
 

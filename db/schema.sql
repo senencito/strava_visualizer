@@ -84,3 +84,41 @@ CREATE TABLE IF NOT EXISTS streams (
   fetched_at  TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_streams_activity ON streams(activity_id);
+
+-- ── Race Results (imported from Sporthive) ────────────────────────────────────
+
+-- One row per imported race
+CREATE TABLE IF NOT EXISTS race_events (
+  id                  SERIAL PRIMARY KEY,
+  sporthive_event_id  VARCHAR(50) NOT NULL,
+  sporthive_race_id   VARCHAR(20) NOT NULL,
+  event_name          VARCHAR(200),
+  race_name           VARCHAR(200),
+  event_date          DATE,
+  distance_m          FLOAT,
+  location            VARCHAR(200),
+  total_finishers     INT,
+  imported_at         TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(sporthive_event_id, sporthive_race_id)
+);
+
+-- Every finisher for each race
+CREATE TABLE IF NOT EXISTS race_finishers (
+  id              SERIAL PRIMARY KEY,
+  race_event_id   INT REFERENCES race_events(id) ON DELETE CASCADE,
+  bib             VARCHAR(20),
+  name            VARCHAR(200),
+  gender          INT,          -- 1=M, 2=F (Sporthive convention)
+  age_group       VARCHAR(30),  -- e.g. "M3539", "FSR", "M4044"
+  overall_rank    INT,
+  gender_rank     INT,
+  age_group_rank  INT,
+  chip_time_s     INT,          -- finish time in seconds
+  country_code    VARCHAR(5),
+  athlete_id      BIGINT REFERENCES athletes(strava_id) ON DELETE SET NULL,
+  created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_finishers_race     ON race_finishers(race_event_id);
+CREATE INDEX IF NOT EXISTS idx_finishers_bib      ON race_finishers(bib, race_event_id);
+CREATE INDEX IF NOT EXISTS idx_finishers_athlete  ON race_finishers(athlete_id);
+CREATE INDEX IF NOT EXISTS idx_finishers_agegroup ON race_finishers(age_group);

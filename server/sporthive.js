@@ -6,10 +6,38 @@ const PAGE_SIZE = 100;
 const RATE_LIMIT_MS = 350; // polite delay between pages
 
 // ── Parse event/race IDs from any Sporthive URL ───────────────────────────────
+// Handles:
+//   https://results.sporthive.com/events/123/races/3
+//   https://results.sporthive.com/events/123/races/3/bib/456
+//   https://results.sporthive.com/events/123          ← event only, raceId null
 function parseSporthiveUrl(url) {
-  const m = url.match(/events\/(\d+)\/races\/(\d+)/);
-  if (!m) throw new Error(`Cannot parse event/race IDs from: ${url}`);
-  return { eventId: m[1], raceId: m[2] };
+  const withRace = url.match(/events\/(\d+)\/races\/(\d+)/);
+  if (withRace) return { eventId: withRace[1], raceId: withRace[2] };
+
+  const eventOnly = url.match(/events\/(\d+)/);
+  if (eventOnly) return { eventId: eventOnly[1], raceId: null };
+
+  throw new Error(`Cannot parse event ID from URL: ${url}`);
+}
+
+// ── Fetch available races for an event ────────────────────────────────────────
+async function fetchEventRaces(eventId) {
+  // Try the event detail endpoint
+  const url = `https://sporthive.com/api/events/${eventId}`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SenenViz/1.0)', 'Accept': 'application/json' },
+    timeout: 15000,
+  });
+  if (!res.ok) throw new Error(`Could not fetch event ${eventId}: ${res.status}`);
+  const data = await res.json();
+  // Sporthive returns races array on the event object
+  const races = data.races || data.event?.races || [];
+  return races.map(r => ({
+    id:   String(r.id || r.raceId || r.race_id),
+    name: r.name || r.raceName || r.race_name || `Race ${r.id}`,
+    distance: r.distance || null,
+    participants: r.participantCount || r.participants || null,
+  }));
 }
 
 // ── Fetch one page ─────────────────────────────────────────────────────────────
@@ -67,8 +95,15 @@ function fmtTime(s) {
 }
 
 // ── Main import function ───────────────────────────────────────────────────────
-async function importRace({ url, eventName, raceName, eventDate, distanceM, location, replace = false }) {
-  const { eventId, raceId } = parseSporthiveUrl(url);
+async function importRace({ url, eventName, raceName, eventDate, distanceM, location, replace = false, raceId: explicitRaceId }) {
+  const { eventId, raceId: parsedRaceId } = parseSporthiveUrl(url);
+  const raceId = explicitRaceId || parsedRaceId;
+
+  // If no race ID, fetch the list of races so the user can pick
+  if (!raceId) {
+    const races = await fetchEventRaces(eventId);
+    return { ok: false, needs_race_selection: true, eventId, races };
+  }
 
   // Check for existing import
   const existing = await queryOne(
@@ -216,4 +251,4 @@ async function lookupBib(raceEventId, bib) {
   };
 }
 
-module.exports = { importRace, lookupBib, parseSporthiveUrl, fmtTime };
+module.exports = { importRace, lookupBib, parseSporthiveUrl, fetchEventRaces, fmtTime };

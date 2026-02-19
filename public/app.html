@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Senén Viz · 0.1</title>
+<title>Senén Viz · 0.2</title>
 <meta name="description" content="Visualize and compare your Strava runs with animated elevation, pace and heart rate charts.">
 <meta name="theme-color" content="#16a34a">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -76,19 +76,12 @@ html { height: -webkit-fill-available; }
 .dtab.active { background: var(--ink); border-color: var(--ink); color: white; }
 
 /* SCREENS */
-#setup-screen    { display: none; flex-direction: column; width: 100%; max-width: 420px; margin-top: 20px; }
-#callback-screen { display: none; flex-direction: column; width: 100%; max-width: 420px; margin-top: 20px; }
 #picker-screen   { display: none; flex-direction: column; width: 100%; max-width: 620px; margin-top: 20px; }
 #viz-screen      { display: none; flex-direction: column; width: 100%; max-width: 980px; }
 
 /* SETUP */
-#setup-screen h2 { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
-#setup-screen p { font-size: 13px; color: var(--ink-muted); line-height: 1.6; margin-bottom: 22px; }
 
 /* CALLBACK */
-#callback-screen .card { text-align: center; }
-#callback-screen h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-#callback-screen p { font-size: 13px; color: var(--ink-muted); line-height: 1.6; margin-bottom: 16px; }
 .field-inline { display: flex; gap: 8px; margin-bottom: 12px; }
 .field-inline input { flex: 1; padding: 9px 13px; border: 1.5px solid var(--grid); border-radius: 9px; font-family: var(--mono); font-size: 12px; background: var(--bg); color: var(--ink); outline: none; }
 
@@ -160,8 +153,7 @@ svg { display: block; overflow: visible; }
   .ls-val { font-size: 16px; }
   .race-legend { gap: 6px; }
   .race-pill { font-size: 9px; padding: 4px 8px 4px 6px; }
-  #setup-screen, #callback-screen, #picker-screen { margin-top: 10px; }
-  .dist-tabs { gap: 6px; }
+    .dist-tabs { gap: 6px; }
   .dtab { padding: 7px 13px; font-size: 10px; }
 }
 .ctrl-btn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 9px 20px; border-radius: 100px; cursor: pointer; border: 1.5px solid var(--ink); background: var(--ink); color: white; transition: opacity 0.15s; min-width: 76px; text-align: center; }
@@ -203,24 +195,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
 </head>
 <body>
 
-  <div class="card">
-    <h2>Connect Strava</h2>
-    <p>Enter your Strava API credentials to load and visualize your runs.</p>
-    <div class="field"><label>Client ID</label><input type="text" id="client-id" placeholder="e.g. 143822" autocomplete="off"></div>
-    <div class="field"><label>Client Secret</label><input type="password" id="client-secret" autocomplete="off"></div>
-    <button class="btn btn-primary btn-block" onclick="startOAuth()">Connect with Strava →</button>
-    <div class="err" id="setup-err"></div>
-    <p style="margin-top:20px;font-family:var(--mono);font-size:10px;color:var(--ink-muted);text-align:center;letter-spacing:0.05em">SENÉN STRAVA VISUALIZER · BUILT FOR RUNNERS</p>
-    <div class="hint">
-      <strong>🏃 First time? Here's how to connect:</strong><br><br>
-      <strong>Step 1 —</strong> Go to <a href="https://www.strava.com/settings/api" target="_blank">strava.com/settings/api</a> and create a free API application.<br><br>
-      <strong>Step 2 —</strong> In the app settings, set <code>Authorization Callback Domain</code> to the domain where you're viewing this (<code>senencito.github.io</code>).<br><br>
-      <strong>Step 3 —</strong> Copy your <strong>Client ID</strong> and <strong>Client Secret</strong> from the app page and paste them above.<br><br>
-      <strong>Step 4 —</strong> Click Connect — you'll be redirected to Strava to authorize, then brought back here automatically.<br><br>
-      Your credentials are never stored beyond this browser session.
-    </div>
-  </div>
-</div>
+
 
   <div class="card">
     <h2>Connecting…</h2>
@@ -276,7 +251,6 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
   </div>
   <div id="load-streams" class="loading-msg" style="display:none"><div class="spinner"></div>Loading GPS streams…</div>
   <div class="err" id="picker-err"></div>
-  <button class="back-link" onclick="showScreen('setup')">← Change credentials</button>
 </div>
 
 <!-- VIZ -->
@@ -1273,34 +1247,7 @@ let rszT;
 window.addEventListener('resize',()=>{clearTimeout(rszT);rszT=setTimeout(()=>{if(document.getElementById('viz-screen').style.display!=='none'&&S.races.length){drawCharts();attachHover();renderProgress(S.progress);}},150);});
 
 // INIT
-window.addEventListener('load',async()=>{
-  const p=new URLSearchParams(window.location.search);
-  const code=p.get('code'), err=p.get('error');
-  const sid=sessionStorage.getItem('sc_id'), ssec=sessionStorage.getItem('sc_sec');
-  dbg(`Load: code=${code?'✓':'none'} err=${err||'none'} id=${sid||'none'} sec=${ssec?'✓':'none'}`);
-  if(sid) document.getElementById('client-id').value=sid;
-  if(ssec) document.getElementById('client-secret').value=ssec;
-  if(err){showScreen('setup');showErr('setup-err','Strava error: '+err);return;}
-  if(code&&sid&&ssec){
-    showScreen('callback');
-    window.history.replaceState({},'',window.location.pathname);
-    try{await doExchange(code);showScreen('picker');fetchActivities();}
-    catch(e){
-      dbg('Exchange failed: '+e.message);
-      document.getElementById('cb-msg').textContent='Auto-auth failed. Paste the redirect URL:';
-      document.getElementById('manual-row').style.display='flex';
-      showErr('cb-err',e.message);
-    }
-  } else if(code&&(!sid||!ssec)){
-    showScreen('callback');
-    document.getElementById('cb-msg').textContent='Session lost. Paste the redirect URL below:';
-    document.getElementById('manual-url').value=window.location.href;
-    document.getElementById('manual-row').style.display='flex';
-    window.history.replaceState({},'',window.location.pathname);
-  } else {
-    showScreen('setup');
-  }
-});
+window.addEventListener('load', () => { initApp(); });
 
 // ── SERVICE WORKER (PWA offline support) ──────────────────────────────────────
 if ('serviceWorker' in navigator) {

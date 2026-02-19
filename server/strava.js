@@ -68,11 +68,9 @@ async function syncActivities(athlete) {
   let totalNew = 0;
 
   while (true) {
-    const acts = await stravaFetch(athlete, '/athlete/activities', {
-      per_page: 50,
-      page,
-      after: lastSync,
-    });
+    const params = { per_page: 50, page };
+    if (lastSync > 0) params.after = lastSync;
+    const acts = await stravaFetch(athlete, '/athlete/activities', params);
 
     if (!Array.isArray(acts) || acts.length === 0) break;
 

@@ -120,6 +120,8 @@ html { height: -webkit-fill-available; }
 .eye-btn:hover { color: var(--ink); }
 .wtype-badge { display: inline-block; font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; padding: 2px 6px; border-radius: 4px; background: #f0ede6; color: #888; margin-left: 5px; vertical-align: middle; }
 .hr-flag { display: inline-block; font-size: 11px; color: #22c55e; margin-left: 4px; vertical-align: middle; line-height: 1; }
+.shoe-tag { font-family: var(--mono); font-size: 10px; color: var(--ink-muted); display: flex; align-items: center; gap: 4px; margin-top: 3px; }
+.shoe-tag span { color: var(--ink); }
 .wtype-badge.wtype-pill { background: transparent; border: 1px solid var(--grid); margin-left: 3px; }
 /* Race type gets accent color */
 .wtype-race { background: #fff0eb !important; color: #fc4c02 !important; border-color: #fdddd5 !important; }
@@ -291,8 +293,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
     <svg id="hrsvg" style="width:100%;height:110px"></svg>
   </div>
   <div class="chart-card" id="ae-card" style="display:none">
-    <div class="chart-title">Aerobic Efficiency <span style="font-size:9px;color:var(--ink-muted)">(higher = better)</span></div>
-    <svg id="aesvg" style="width:100%;height:110px"></svg>
+    <div class="chart-title">Aerobic Efficiency Across Selected Runs <span style="font-size:9px;color:var(--ink-muted)">(higher = better)</span></div>
+    <svg id="aesvg" style="width:100%;height:130px"></svg>
   </div>
   <div class="controls-card">
     <button class="ctrl-btn" id="play-btn" onclick="togglePlay()">Play</button>
@@ -347,7 +349,8 @@ const S = {
   races:[], progress:0, playing:false, speed:8,
   lastTs:null, rafId:null, maxDuration:0,
   distMin:18000, distMax:24000,
-  distLabels:{'18000':'Half Marathon','14500':'10 Miles','8500':'10K','4000':'5K'}
+  distLabels:{'18000':'Half Marathon','14500':'10 Miles','8500':'10K','4000':'5K'},
+  gearCache: {}
 };
 
 function showScreen(n) {
@@ -383,6 +386,21 @@ function dbg(m) {
 }
 function showErr(id,m){const e=document.getElementById(id);e.textContent=m;e.style.display='block';}
 function hideErr(id){document.getElementById(id).style.display='none';}
+// ── GEAR ─────────────────────────────────────────────────────────────────────
+async function fetchGear(gearId) {
+  if (!gearId) return null;
+  if (S.gearCache[gearId]) return S.gearCache[gearId];
+  try {
+    const r = await fetch(`https://www.strava.com/api/v3/gear/${gearId}`, {
+      headers: { 'Authorization': `Bearer ${S.accessToken}` }
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    S.gearCache[gearId] = d;
+    return d;
+  } catch(e) { return null; }
+}
+
 // ── AEROBIC EFFICIENCY ──────────────────────────────────────────────────────
 // AE = avg_speed_ms / avg_hr * 1000  (higher = better)
 function calcAE(act) {
@@ -530,11 +548,21 @@ function renderList(acts) {
     const hrFlag=a.has_heartrate?`<span class="hr-flag" title="Heart rate data">♥</span>`:'';
     const ae=calcAE(a);
     const aeBadge=ae?`<span class="ae-badge" title="Aerobic Efficiency">AE ${ae}</span>`:'';
-    el.innerHTML=`<div class="act-left"><div class="check"></div><div><div class="act-name">${a.name} ${badge}${hrFlag}${aeBadge}</div><div class="act-date">${date}</div></div></div><div class="act-stats"><div class="act-dist">${mi} mi</div><div class="act-time">${fmtTime(a.moving_time)}</div></div>`;
+    el.innerHTML=`<div class="act-left"><div class="check"></div><div>
+      <div class="act-name">${a.name} ${badge}${hrFlag}${aeBadge}</div>
+      <div class="act-date">${date}</div>
+      <div class="shoe-tag" id="shoe-${a.id}"></div>
+    </div></div><div class="act-stats"><div class="act-dist">${mi} mi</div><div class="act-time">${fmtTime(a.moving_time)}</div></div>`;
     el.onclick=()=>toggleSel(a.id,el);
     list.appendChild(el);
-    // Color race badges
     el.querySelectorAll('.wtype-badge').forEach(b=>{ if(b.textContent==='Race') b.classList.add('wtype-race'); });
+    // Async load shoe name
+    if(a.gear_id){
+      fetchGear(a.gear_id).then(g=>{
+        const shoeEl=document.getElementById(`shoe-${a.id}`);
+        if(g&&shoeEl) shoeEl.innerHTML=`👟 <span>${g.name}</span>`;
+      });
+    }
   });
 }
 function toggleSel(id,el) {
@@ -569,7 +597,8 @@ async function loadSelected() {
     const paceSmooth=smoothPaceByTime(pace,time_s,60); // 1-min rolling average for pace
     const aeArr = calcAEfromStreams(paceSmooth, hrSmooth, time_s);
     const aeSmooth = smoothArr(aeArr ? aeArr.map(v=>v||0) : null, 20);
-    races.push({act,dist_mi,alt_ft,pace:paceSmooth,hr:hrSmooth,ae:aeSmooth,time_s,n,color:COLORS[i%COLORS.length],workoutType:act.workout_type});
+    const gear = act.gear_id ? await fetchGear(act.gear_id) : null;
+    races.push({act,dist_mi,alt_ft,pace:paceSmooth,hr:hrSmooth,ae:aeSmooth,time_s,n,color:COLORS[i%COLORS.length],workoutType:act.workout_type,shoe:gear?gear.name:null});
     dbg(`  ${act.name}: ${n} points`);
   }
   document.getElementById('load-streams').style.display='none';
@@ -601,7 +630,8 @@ function initViz() {
     const wl=workoutLabel(r.workoutType);
     const wbadge=wl?`<span class="wtype-badge wtype-pill">${wl}</span>`:'';
     const hrflag=r.hr?`<span class="hr-flag" title="Heart rate data">♥</span>`:'';
-    pill.innerHTML=`<input type="color" class="color-pick" value="${r.color}" data-idx="${i}" title="Pick color"><span class="pill-name">${r.act.name}${wbadge}${hrflag} · ${date}</span><button class="eye-btn" data-idx="${i}" title="Hide/show">◉</button>`;
+    const shoetag=r.shoe?`<span style="font-family:var(--mono);font-size:9px;color:var(--ink-muted);margin-left:4px">👟 ${r.shoe}</span>`:'';
+    pill.innerHTML=`<input type="color" class="color-pick" value="${r.color}" data-idx="${i}" title="Pick color"><span class="pill-name">${r.act.name}${wbadge}${hrflag}${shoetag} · ${date}</span><button class="eye-btn" data-idx="${i}" title="Hide/show">◉</button>`;
     leg.appendChild(pill);
   });
   document.querySelectorAll('.color-pick').forEach(inp=>{
@@ -624,7 +654,8 @@ function initViz() {
   });
   // Show HR card if any race has HR data
   document.getElementById('hr-card').style.display = S.races.some(r=>r.hr) ? '' : 'none';
-  document.getElementById('ae-card').style.display = S.races.some(r=>r.ae) ? '' : 'none';
+  const hasAEData = S.races.some(r=>r.ae);
+  document.getElementById('ae-card').style.display = hasAEData && S.races.length > 0 ? '' : 'none';
   // AE comparison summary
   const aeComp = document.getElementById('ae-comparison');
   const aeBars = document.getElementById('ae-bars');
@@ -777,43 +808,68 @@ function drawHR(){
   document.getElementById('hrsvg').outerHTML=h;
 }
 
-// ── AEROBIC EFFICIENCY CHART ──────────────────────────────────────────────────
+// ── AEROBIC EFFICIENCY TIMELINE (X=date, one point per selected run) ──────────
 function drawAE(){
   const el=document.getElementById('aesvg'); if(!el) return;
-  const hasAE=S.races.some(r=>!r.hidden&&r.ae); if(!hasAE) return;
-  const W=svgW('aesvg'), H=110, PL=46,PR=12,PT=8,PB=24;
+  const visible=S.races.filter(r=>!r.hidden&&r.ae);
+  if(!visible.length) return;
+
+  // Compute avg AE per race
+  const pts=visible.map(r=>({
+    t: new Date(r.act.start_date_local).getTime(),
+    ae: parseFloat(avgAE(r.ae))||0,
+    color: r.color,
+    name: r.act.name,
+    date: new Date(r.act.start_date_local).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+  })).sort((a,b)=>a.t-b.t);
+
+  const W=svgW('aesvg'), H=130, PL=46,PR=16,PT=12,PB=30;
   const cw=W-PL-PR, ch=H-PT-PB;
-  let aeMn=Infinity,aeMx=-Infinity;
-  S.races.forEach(r=>{if(!r.hidden&&r.ae)r.ae.forEach(v=>{if(v&&v>0){if(v<aeMn)aeMn=v;if(v>aeMx)aeMx=v;}});});
-  if(!isFinite(aeMn)){aeMn=1;aeMx=5;}
-  aeMn=Math.max(0,aeMn-0.2); aeMx=aeMx+0.2;
-  // Store on S so renderProgress uses same scale
-  S.aeScaleMin=aeMn; S.aeScaleMax=aeMx;
-  const maxD=Math.max(...S.races.filter(r=>!r.hidden).map(r=>r.dist_mi[r.n-1]));
-  const xS=d=>PL+(d/maxD)*cw;
-  const yA=v=>PT+ch-((v-aeMn)/(aeMx-aeMn))*ch;
+
+  const aeMn=Math.max(0, Math.min(...pts.map(p=>p.ae))-0.3);
+  const aeMx=Math.max(...pts.map(p=>p.ae))+0.3;
+  const tMn=pts[0].t, tMx=pts[pts.length-1].t||pts[0].t+1;
+
+  const xS=t=>pts.length===1 ? PL+cw/2 : PL+((t-tMn)/(tMx-tMn))*cw;
+  const yS=v=>PT+ch-((v-aeMn)/(aeMx-aeMn))*ch;
 
   let h=`<svg id="aesvg" viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">`;
-  const yMid=yA((aeMn+aeMx)/2);
-  h+=`<rect x="${PL}" y="${PT}" width="${cw}" height="${yMid-PT}" fill="#f0fdf4" opacity="0.5"/>`;
+
+  // Green tint upper half
+  const yMid=yS((aeMn+aeMx)/2);
+  h+=`<rect x="${PL}" y="${PT}" width="${cw}" height="${Math.max(0,yMid-PT)}" fill="#f0fdf4" opacity="0.6" rx="3"/>`;
+
+  // Grid lines
   niceTicks(aeMn,aeMx,4).forEach(v=>{
-    const y=yA(v);
+    const y=yS(v);
     h+=`<line class="grid-line" x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}"/>`;
     h+=`<text class="axis-text" x="${PL-5}" y="${y+3}" text-anchor="end">${parseFloat(v).toFixed(1)}</text>`;
   });
-  mileTicks(maxD).forEach(m=>{ h+=`<text class="axis-text" x="${xS(m)}" y="${H-5}" text-anchor="middle">${m}</text>`; });
-  S.races.forEach(r=>{
-    if(r.hidden||!r.ae) return;
-    const xs=r.dist_mi.map(xS);
-    const ys=r.ae.map(v=>v&&v>0?yA(v):null);
-    h+=`<path d="${mkPath(xs,ys)}" fill="none" stroke="${r.color}" stroke-width="1.2" opacity="0.12" stroke-linecap="round"/>`;
-    const uid=`aec${r.act.id}`;
-    h+=`<defs><clipPath id="${uid}"><rect id="${uid}r" x="${PL}" y="0" width="0" height="${H}"/></clipPath></defs>`;
-    h+=`<g clip-path="url(#${uid})"><path d="${mkPath(xs,ys)}" fill="none" stroke="${r.color}" stroke-width="2.2" stroke-linecap="round"/></g>`;
-    const sy=ys[0]!=null?ys[0]:PT+ch/2;
-    h+=`<circle id="rae${r.act.id}" cx="${xs[0]}" cy="${sy}" r="5" fill="${r.color}" stroke="white" stroke-width="2" style="filter:drop-shadow(0 0 4px ${r.color}99)"/>`;
+
+  // Trend line connecting all points
+  if(pts.length>1){
+    let line='';
+    pts.forEach((p,i)=>{ line+=(i===0?'M':'L')+xS(p.t).toFixed(1)+','+yS(p.ae).toFixed(1)+' '; });
+    h+=`<path d="${line}" fill="none" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
+
+  // Points — one per race, colored by race color
+  const best=pts.reduce((a,b)=>b.ae>a.ae?b:a);
+  pts.forEach(p=>{
+    const x=xS(p.t), y=yS(p.ae);
+    const isBest=p===best;
+    h+=`<circle cx="${x}" cy="${y}" r="${isBest?7:5}" fill="${p.color}" stroke="white" stroke-width="2"
+      style="filter:drop-shadow(0 0 4px ${p.color}88);cursor:pointer">
+      <title>${p.name}
+${p.date} · AE ${p.ae.toFixed(2)}</title>
+    </circle>`;
+    // Date label below x axis
+    const lbl=new Date(p.t).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    h+=`<text class="axis-text" x="${x}" y="${H-8}" text-anchor="middle">${lbl}</text>`;
+    // Best label
+    if(isBest) h+=`<text style="font-family:'DM Mono',monospace;font-size:9px;fill:#16a34a;font-weight:600" x="${x}" y="${y-12}" text-anchor="middle">BEST</text>`;
   });
-  h+=`<line id="aevl" x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="#1c1c1c" stroke-width="1.5" stroke-dasharray="4 3" opacity="0"/>`;
+
   h+='</svg>';
   document.getElementById('aesvg').outerHTML=h;
 }
@@ -842,7 +898,7 @@ function renderAEBars(){
 function syncCrosshair(frac){
   // Move all three vlines to the same fractional position
   if(frac===null){
-    ['evl','pvl','hrvl','aevl'].forEach(id=>{
+    ['evl','pvl','hrvl'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.setAttribute('opacity','0');
     });
     return;
@@ -982,8 +1038,6 @@ function renderProgress(frac){
   S.races.forEach(r=>{if(!r.hidden&&r.hr)r.hr.forEach(h=>{if(h&&h>0){if(h<gHMn)gHMn=h;if(h>gHMx)gHMx=h;}});});
   if(!isFinite(gHMn)){gHMn=120;gHMx=200;}
   gHMn=gHMn-5; gHMx=gHMx+5;
-  // AE scale — use same values computed by drawAE
-  const gAEMn=S.aeScaleMin||1, gAEMx=S.aeScaleMax||5;
 
   S.races.forEach(r=>{
     if(r.hidden) return;
@@ -1025,33 +1079,18 @@ function renderProgress(frac){
     const rp=document.getElementById(`rp${r.act.id}`);
     if(rp){rp.setAttribute('cx',xP);rp.setAttribute('cy',yP2);}
 
-    // AE clip + dot — use global scale matching drawAE
-    const aecr=document.getElementById(`aec${r.act.id}r`);
-    if(aecr) aecr.setAttribute('width', dFrac*pcw);
-    if(r.ae){
-      const aeSVG=document.getElementById('aesvg');
-      if(aeSVG){
-        const aW=aeSVG.getBoundingClientRect().width||800;
-        const aCW=aW-PL-PR, aH=110, aPB=24, aCH=aH-PT-aPB;
-        const xAE=PL+(r.dist_mi[idx]/maxD)*aCW;
-        const yAE=r.ae[idx]&&r.ae[idx]>0
-          ? PT+aCH-((r.ae[idx]-gAEMn)/(gAEMx-gAEMn))*aCH
-          : PT+aCH/2;
-        const rae=document.getElementById(`rae${r.act.id}`);
-        if(rae){rae.setAttribute('cx',xAE);rae.setAttribute('cy',yAE);}
-      }
-    }
+
   });
 
   // Vlines from first race
   const r0=S.races[0], i0=Math.round(frac*(r0.n-1));
   const xE0=PL+(r0.dist_mi[i0]/maxD)*ecw, xP0=PL+(r0.dist_mi[i0]/maxD)*pcw;
-  const evl=document.getElementById('evl'), pvl=document.getElementById('pvl'), hrvl=document.getElementById('hrvl'), aevl=document.getElementById('aevl');
+  const evl=document.getElementById('evl'), pvl=document.getElementById('pvl'), hrvl=document.getElementById('hrvl');
   const vlOp=frac>0?'0.35':'0';
   if(evl){evl.setAttribute('x1',xE0);evl.setAttribute('x2',xE0);evl.setAttribute('opacity',vlOp);}
   if(pvl){pvl.setAttribute('x1',xP0);pvl.setAttribute('x2',xP0);pvl.setAttribute('opacity',vlOp);}
   if(hrvl){hrvl.setAttribute('x1',xP0);hrvl.setAttribute('x2',xP0);hrvl.setAttribute('opacity',vlOp);}
-  if(aevl){aevl.setAttribute('x1',xP0);aevl.setAttribute('x2',xP0);aevl.setAttribute('opacity',vlOp);}
+
 
   // ── Crosshair bar ────────────────────────────────────────────────────────────
   const bar=document.getElementById('crosshair-bar');

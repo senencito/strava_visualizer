@@ -219,8 +219,14 @@ app.get('/api/streams/:activityId', requireAuth, async (req, res) => {
 
 // ── Health check ──────────────────────────────────────────────────────────────
 
-app.get('/health', (req, res) => res.json({ ok: true, ts: new Date() }));
-
+app.get('/health', (req, res) => res.json({ 
+  ok: true, 
+  ts: new Date(),
+  has_client_id: !!process.env.STRAVA_CLIENT_ID,
+  client_id_preview: process.env.STRAVA_CLIENT_ID?.slice(0,3) || 'MISSING',
+  has_secret: !!process.env.STRAVA_CLIENT_SECRET,
+  has_db: !!process.env.DATABASE_URL,
+}));
 // ── SPA catch-all ─────────────────────────────────────────────────────────────
 
 app.get('/app', (req, res) => {

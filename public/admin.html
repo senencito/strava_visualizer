@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Race Admin · Senén Viz</title>
+<meta name="theme-color" content="#16a34a">
+<style>
+  :root {
+    --bg: #f5f4f0; --surface: #fff; --ink: #1c1c1c;
+    --ink-muted: #888; --grid: #e8e5de; --accent: #16a34a;
+    --sans: 'DM Sans', system-ui, sans-serif;
+    --mono: 'DM Mono', 'Courier New', monospace;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); padding: 32px 24px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; }
+  header svg { flex-shrink: 0; }
+  .header-text h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+  .header-text p  { font-size: 12px; color: var(--ink-muted); font-family: var(--mono); margin-top: 2px; }
+
+  /* Cards */
+  .card { background: var(--surface); border-radius: 16px; padding: 28px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.04); }
+  .card-title { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-muted); margin-bottom: 20px; }
+
+  /* Form */
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-muted); margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%; padding: 10px 13px; border: 1.5px solid var(--grid);
+    border-radius: 9px; font-family: var(--sans); font-size: 13px;
+    background: var(--bg); color: var(--ink); outline: none;
+    transition: border-color .15s;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-hint { font-size: 11px; color: var(--ink-muted); margin-top: 5px; font-family: var(--mono); }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .checkbox-row input { width: auto; }
+  .checkbox-row label { font-size: 13px; color: var(--ink); font-family: var(--sans); text-transform: none; letter-spacing: 0; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 22px; border-radius: 100px; font-family: var(--sans); font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: opacity .15s; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { opacity: .88; }
+  .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-sm { padding: 7px 14px; font-size: 12px; }
+  .btn-outline { background: transparent; border: 1.5px solid var(--grid); color: var(--ink); }
+
+  /* Log */
+  .log { background: #111; color: #22c55e; font-family: var(--mono); font-size: 11px; border-radius: 10px; padding: 16px; min-height: 80px; max-height: 260px; overflow-y: auto; white-space: pre-wrap; line-height: 1.6; display: none; margin-top: 16px; }
+  .log.visible { display: block; }
+  .log .err { color: #f87171; }
+  .log .ok  { color: #86efac; }
+  .log .dim { color: #6b7280; }
+
+  /* Race table */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-muted); text-align: left; padding: 0 12px 10px; border-bottom: 1px solid var(--grid); }
+  td { padding: 12px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+  .badge { font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 5px; background: #f0fdf4; color: var(--accent); }
+  .no-races { text-align: center; padding: 40px; color: var(--ink-muted); font-size: 13px; }
+
+  /* Stats modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border-radius: 20px; padding: 28px; max-width: 600px; width: 100%; max-height: 80vh; overflow-y: auto; }
+  .modal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+  .modal-close { background: var(--bg); border: none; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .stats-cell { background: var(--bg); border-radius: 10px; padding: 12px; }
+  .stats-cell-label { font-family: var(--mono); font-size: 10px; color: var(--ink-muted); margin-bottom: 4px; }
+  .stats-cell-val { font-size: 15px; font-weight: 600; }
+  .stats-cell-sub { font-size: 11px; color: var(--ink-muted); font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <svg width="36" height="36" viewBox="0 0 32 32" fill="none">
+      <rect width="32" height="32" rx="8" fill="#16a34a"/>
+      <path d="M9 23 L16 9 L23 23" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <path d="M12 18 L20 18" stroke="white" stroke-width="1.8" stroke-linecap="round" opacity="0.6"/>
+    </svg>
+    <div class="header-text">
+      <h1>Race Admin</h1>
+      <p>SENÉN VIZ · SPORTHIVE IMPORTER</p>
+    </div>
+  </header>
+
+  <!-- Import Form -->
+  <div class="card">
+    <div class="card-title">Import Race from Sporthive</div>
+    <div class="field">
+      <label>Sporthive URL *</label>
+      <input type="url" id="f-url" placeholder="https://results.sporthive.com/events/7421030582090460416/races/3">
+      <div class="field-hint">Paste any URL from results.sporthive.com — the event and race IDs are extracted automatically</div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Event Name *</label>
+        <input type="text" id="f-name" placeholder="El Mulo Half Marathon">
+      </div>
+      <div class="field">
+        <label>Race / Category Name</label>
+        <input type="text" id="f-race-name" placeholder="Half Marathon Open">
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Event Date</label>
+        <input type="date" id="f-date">
+      </div>
+      <div class="field">
+        <label>Distance</label>
+        <select id="f-dist">
+          <option value="">Unknown</option>
+          <option value="5000">5K</option>
+          <option value="10000">10K</option>
+          <option value="15000">15K</option>
+          <option value="16090">10 Miles</option>
+          <option value="21097" selected>Half Marathon (21.1 km)</option>
+          <option value="42195">Marathon (42.2 km)</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label>Location</label>
+      <input type="text" id="f-location" placeholder="San Juan, Puerto Rico">
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="f-replace">
+      <label for="f-replace">Replace if already imported</label>
+    </div>
+
+    <div style="margin-top:20px;display:flex;gap:10px;align-items:center">
+      <button class="btn btn-primary" id="btn-import" onclick="importRace()">
+        ↓ Import All Finishers
+      </button>
+      <span id="import-status" style="font-family:var(--mono);font-size:11px;color:var(--ink-muted)"></span>
+    </div>
+    <div class="log" id="import-log"></div>
+  </div>
+
+  <!-- Imported Races -->
+  <div class="card">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>Imported Races</span>
+      <button class="btn btn-outline btn-sm" onclick="loadRaces()">↻ Refresh</button>
+    </div>
+    <div id="races-table">
+      <div class="no-races">Loading…</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Stats Modal -->
+<div class="modal-overlay" id="stats-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h3 id="modal-title" style="font-size:16px;font-weight:600;margin-bottom:4px"></h3>
+        <div id="modal-subtitle" style="font-size:12px;color:var(--ink-muted);font-family:var(--mono)"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal-body" class="stats-grid"></div>
+  </div>
+</div>
+
+<script>
+// ── Get admin password from URL ───────────────────────────────────────────────
+const adminPass = new URLSearchParams(location.search).get('pass') || '';
+const authHeaders = { 'Content-Type': 'application/json', 'x-admin-password': adminPass };
+
+// ── Logging ───────────────────────────────────────────────────────────────────
+function log(msg, type='') {
+  const el = document.getElementById('import-log');
+  el.classList.add('visible');
+  const line = document.createElement('div');
+  if (type) line.className = type;
+  line.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ── Format seconds ────────────────────────────────────────────────────────────
+function fmtTime(s) {
+  if (!s) return '—';
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+    : `${m}:${String(sec).padStart(2,'0')}`;
+}
+
+// ── Import race ───────────────────────────────────────────────────────────────
+async function importRace() {
+  const url      = document.getElementById('f-url').value.trim();
+  const name     = document.getElementById('f-name').value.trim();
+  const raceName = document.getElementById('f-race-name').value.trim();
+  const date     = document.getElementById('f-date').value;
+  const dist     = document.getElementById('f-dist').value;
+  const location = document.getElementById('f-location').value.trim();
+  const replace  = document.getElementById('f-replace').checked;
+
+  if (!url)  { alert('Sporthive URL is required'); return; }
+  if (!name) { alert('Event name is required'); return; }
+
+  const btn = document.getElementById('btn-import');
+  const status = document.getElementById('import-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Importing…';
+  document.getElementById('import-log').textContent = '';
+  document.getElementById('import-log').classList.add('visible');
+  status.textContent = '';
+
+  log(`Starting import: ${name}`);
+  log(`URL: ${url}`, 'dim');
+
+  try {
+    const res = await fetch('/api/admin/import-race', {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        url, event_name: name, race_name: raceName || null,
+        event_date: date || null,
+        distance_m: dist ? parseFloat(dist) : null,
+        location: location || null,
+        replace,
+      }),
+    });
+
+    const d = await res.json();
+
+    if (!res.ok) {
+      log(`ERROR: ${d.error}`, 'err');
+      status.textContent = '❌ Failed';
+      return;
+    }
+
+    if (d.already_imported && !replace) {
+      log(`Already imported (${d.total_finishers} finishers). Check "Replace" to re-import.`, 'err');
+      status.textContent = 'Already imported';
+      return;
+    }
+
+    log(`✓ Imported ${d.total_finishers} finishers`, 'ok');
+    log(`  Age groups: ${d.age_groups}`, 'dim');
+
+    if (d.age_group_breakdown) {
+      Object.entries(d.age_group_breakdown)
+        .sort((a,b) => b[1]-a[1])
+        .forEach(([grp, n]) => log(`  ${grp.padEnd(8)} ${n} finishers`, 'dim'));
+    }
+
+    log('');
+    log('Sample finishers:', 'dim');
+    d.sample?.forEach(f => log(`  #${f.rank}  Bib ${f.bib}  ${f.name}  ${f.category}  ${f.time}`, 'dim'));
+
+    status.textContent = `✓ ${d.total_finishers} finishers imported`;
+    loadRaces();
+
+  } catch(e) {
+    log(`ERROR: ${e.message}`, 'err');
+    status.textContent = '❌ Error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↓ Import All Finishers';
+  }
+}
+
+// ── Load races table ──────────────────────────────────────────────────────────
+async function loadRaces() {
+  const el = document.getElementById('races-table');
+  el.innerHTML = '<div class="no-races">Loading…</div>';
+  try {
+    const res = await fetch('/api/races');
+    const races = await res.json();
+
+    if (!races.length) {
+      el.innerHTML = '<div class="no-races">No races imported yet.</div>';
+      return;
+    }
+
+    el.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Event</th>
+            <th>Date</th>
+            <th>Distance</th>
+            <th>Finishers</th>
+            <th>Imported</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${races.map(r => `
+            <tr>
+              <td>
+                <div style="font-weight:500">${r.event_name || '—'}</div>
+                ${r.race_name ? `<div style="font-size:11px;color:var(--ink-muted);font-family:var(--mono)">${r.race_name}</div>` : ''}
+                <div style="font-size:10px;color:var(--ink-muted);font-family:var(--mono);margin-top:2px">${r.sporthive_event_id}/${r.sporthive_race_id}</div>
+              </td>
+              <td style="font-family:var(--mono);font-size:12px">${r.event_date ? new Date(r.event_date).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}) : '—'}</td>
+              <td style="font-family:var(--mono);font-size:12px">${r.distance_m ? (r.distance_m/1000).toFixed(1)+' km' : '—'}</td>
+              <td><span class="badge">${r.total_finishers?.toLocaleString()}</span></td>
+              <td style="font-family:var(--mono);font-size:11px;color:var(--ink-muted)">${new Date(r.imported_at).toLocaleDateString()}</td>
+              <td>
+                <button class="btn btn-outline btn-sm" onclick="showStats(${r.id}, '${(r.event_name||'').replace(/'/g,"\\'")}')">Stats</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    el.innerHTML = `<div class="no-races">Error: ${e.message}</div>`;
+  }
+}
+
+// ── Show stats modal ──────────────────────────────────────────────────────────
+async function showStats(raceId, raceName) {
+  document.getElementById('modal-title').textContent = raceName;
+  document.getElementById('modal-subtitle').textContent = 'Age group breakdown';
+  document.getElementById('modal-body').innerHTML = 'Loading…';
+  document.getElementById('stats-modal').classList.add('open');
+
+  try {
+    const res = await fetch(`/api/races/${raceId}/stats`);
+    const stats = await res.json();
+
+    if (!stats.length) {
+      document.getElementById('modal-body').innerHTML = '<p style="color:var(--ink-muted);font-size:13px">No stats available.</p>';
+      return;
+    }
+
+    document.getElementById('modal-body').innerHTML = stats.map(s => `
+      <div class="stats-cell">
+        <div class="stats-cell-label">${s.age_group || '?'} · ${s.gender==1?'M':'F'}</div>
+        <div class="stats-cell-val">${parseInt(s.n).toLocaleString()}</div>
+        <div class="stats-cell-sub">Fastest ${fmtTime(parseInt(s.fastest_s))}</div>
+        <div class="stats-cell-sub">Median  ${fmtTime(parseInt(s.median_s))}</div>
+      </div>
+    `).join('');
+
+  } catch(e) {
+    document.getElementById('modal-body').innerHTML = `<p style="color:var(--ink-muted)">${e.message}</p>`;
+  }
+}
+
+function closeModal() {
+  document.getElementById('stats-modal').classList.remove('open');
+}
+document.getElementById('stats-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('stats-modal')) closeModal();
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadRaces();
+</script>
+</body>
+</html>

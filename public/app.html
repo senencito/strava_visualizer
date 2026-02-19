@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Senén Viz · 0.3</title>
+<title>Senén Viz · App</title>
 <meta name="description" content="Visualize and compare your Strava runs with animated elevation, pace and heart rate charts.">
 <meta name="theme-color" content="#16a34a">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -217,6 +217,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
     <button class="btn-logout" onclick="logout()">Sign out</button>
   </div>
 </nav>
+
+<!-- DEBUG PANEL -->
+<div id="debug-panel" style="display:none;width:100%;max-width:980px;background:#1c1c1c;color:#22c55e;font-family:monospace;font-size:11px;border-radius:12px;padding:14px 18px;margin-bottom:16px;white-space:pre-wrap;line-height:1.6;max-height:200px;overflow-y:auto"></div>
 
 <!-- PICKER -->
 <div id="picker-screen">
@@ -474,21 +477,64 @@ async function initApp() {
     fetchActivities();
   } catch(e) { window.location.href = '/'; }
 }
+function debugLog(msg) {
+  const panel = document.getElementById('debug-panel');
+  panel.style.display = 'block';
+  panel.textContent += new Date().toLocaleTimeString() + ' ' + msg + '\n';
+  panel.scrollTop = panel.scrollHeight;
+}
+
 async function doSync() {
   const btn = document.getElementById('btn-sync');
   const msg = document.getElementById('sync-msg');
   btn.classList.add('syncing'); btn.textContent = '↻ Syncing…';
   msg.style.display = 'none';
+  const panel = document.getElementById('debug-panel');
+  panel.textContent = '';
+  debugLog('Starting sync...');
   try {
+    // First check debug endpoint
+    const dbg = await fetch('/api/debug');
+    if (dbg.ok) {
+      const d = await dbg.json();
+      debugLog(`Athlete ID: ${d.athlete_id}`);
+      debugLog(`Activities in DB: ${d.activity_count}`);
+      debugLog(`Last sync: ${d.last_sync_at || 'never'}`);
+      debugLog(`Token valid: ${d.token_valid}`);
+    } else {
+      debugLog(`Debug endpoint: ${dbg.status} ${dbg.statusText}`);
+    }
+
+    debugLog('Calling /api/sync...');
     const res = await fetch('/api/sync', { method: 'POST' });
-    const d = await res.json();
-    msg.style.display = 'inline';
-    msg.textContent = d.new_activities > 0 ? `+${d.new_activities} new` : 'Up to date';
-    setTimeout(() => { msg.style.display = 'none'; }, 3000);
+    const text = await res.text();
+    debugLog(`Sync response (${res.status}): ${text.slice(0, 300)}`);
+
+    let d;
+    try { d = JSON.parse(text); } catch(e) { debugLog('Could not parse sync response as JSON'); }
+
+    if (d) {
+      debugLog(`New activities synced: ${d.new_activities}`);
+      msg.style.display = 'inline';
+      msg.textContent = d.new_activities > 0 ? `+${d.new_activities} new` : 'Up to date';
+      setTimeout(() => { msg.style.display = 'none'; }, 4000);
+    }
+
+    debugLog('Fetching activities from DB...');
+    const actsRes = await fetch('/api/activities?dist_min=0&dist_max=999999');
+    const actsText = await actsRes.text();
+    debugLog(`Activities response (${actsRes.status}): ${actsText.slice(0, 200)}`);
+    let acts;
+    try { acts = JSON.parse(actsText); } catch(e) { debugLog('Could not parse activities'); }
+    if (acts) debugLog(`Total runs in DB: ${acts.length}`);
+
     await fetchActivities();
   } catch(e) {
-    msg.style.display = 'inline'; msg.textContent = 'Sync failed';
-  } finally { btn.classList.remove('syncing'); btn.textContent = '↻ Sync'; }
+    debugLog('ERROR: ' + e.message);
+    msg.style.display = 'inline'; msg.textContent = 'Sync failed — see debug log';
+  } finally {
+    btn.classList.remove('syncing'); btn.textContent = '↻ Sync';
+  }
 }
 async function logout() {
   await fetch('/auth/logout', { method: 'POST' });

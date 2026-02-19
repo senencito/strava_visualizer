@@ -256,10 +256,10 @@ app.get('/admin', requireAdmin, (req, res) => {
 
 // ── Race import (admin only) ───────────────────────────────────────────────────
 app.post('/api/admin/import-race', requireAdmin, async (req, res) => {
-  const { url, event_name, race_name, event_date, distance_m, location, replace } = req.body;
+  const { url, event_name, race_name, race_id, event_date, distance_m, location, replace } = req.body;
   if (!url) return res.status(400).json({ error: 'url is required' });
   try {
-    const result = await importRace({ url, eventName: event_name, raceName: race_name, eventDate: event_date, distanceM: distance_m, location, replace });
+    const result = await importRace({ url, eventName: event_name, raceName: race_name, eventDate: event_date, distanceM: distance_m, location, replace, raceId: race_id });
     res.json(result);
   } catch(err) {
     console.error('Import race error:', err);

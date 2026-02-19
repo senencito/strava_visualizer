@@ -166,6 +166,23 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
 .tip-row { display: flex; justify-content: space-between; gap: 12px; line-height: 1.75; }
 .tip-lbl { color: var(--ink-muted); }
 
+/* AE styles */
+.ae-badge { font-family: var(--mono); font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 5px; background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; margin-left: 6px; }
+.ae-bar-wrap { margin-top: 16px; background: var(--surface); border-radius: 16px; padding: 20px 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.04); }
+.ae-bar-title { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-muted); margin-bottom: 14px; }
+.ae-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; font-family: var(--mono); font-size: 11px; }
+.ae-bar-name { width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-muted); }
+.ae-bar-track { flex: 1; height: 8px; background: var(--grid); border-radius: 4px; overflow: hidden; }
+.ae-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+.ae-bar-val { width: 36px; text-align: right; font-weight: 500; }
+/* Trend chart screen */
+#trend-screen { display: none; flex-direction: column; width: 100%; max-width: 980px; }
+.trend-back { font-family: var(--mono); font-size: 11px; color: var(--ink-muted); background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; padding: 0; margin-bottom: 20px; }
+.trend-back:hover { color: var(--ink); }
+.trend-header h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 4px; }
+.trend-header p { font-size: 13px; color: var(--ink-muted); margin-bottom: 20px; }
+.trend-tab-row { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+
 #dbg { display:none; position:fixed; bottom:0; left:0; right:0; background:#111; color:#0f0; font-family:monospace; font-size:11px; padding:7px 12px; max-height:120px; overflow-y:auto; z-index:9999; border-top:2px solid #222; }
 </style>
 </head>
@@ -231,7 +248,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
   </div>
   <div id="load-acts" class="loading-msg"><div class="spinner"></div>Fetching activities…</div>
   <div class="activity-list" id="act-list"></div>
-  <button class="btn btn-primary" id="btn-viz" style="display:none" onclick="loadSelected()">Visualize selected →</button>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <button class="btn btn-primary" id="btn-viz" style="display:none" onclick="loadSelected()">Visualize selected →</button>
+    <button class="btn btn-outline" id="btn-trend" onclick="showTrend()" style="display:none">AE Trend →</button>
+  </div>
   <div id="load-streams" class="loading-msg" style="display:none"><div class="spinner"></div>Loading GPS streams…</div>
   <div class="err" id="picker-err"></div>
   <button class="back-link" onclick="showScreen('setup')">← Change credentials</button>
@@ -270,6 +290,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
     <div class="chart-title">Heart Rate</div>
     <svg id="hrsvg" style="width:100%;height:110px"></svg>
   </div>
+  <div class="chart-card" id="ae-card" style="display:none">
+    <div class="chart-title">Aerobic Efficiency <span style="font-size:9px;color:var(--ink-muted)">(higher = better)</span></div>
+    <svg id="aesvg" style="width:100%;height:110px"></svg>
+  </div>
   <div class="controls-card">
     <button class="ctrl-btn" id="play-btn" onclick="togglePlay()">Play</button>
     <button class="ctrl-btn outline" onclick="resetAnim()">Reset</button>
@@ -282,6 +306,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
       <span class="speed-val" id="speed-v">8×</span>
     </div>
   </div>
+  <div id="ae-comparison" class="ae-bar-wrap" style="display:none">
+    <div class="ae-bar-title">Aerobic Efficiency Comparison</div>
+    <div id="ae-bars"></div>
+  </div>
   <button class="back-link" style="margin-top:14px" onclick="showScreen('picker')">← Back to activities</button>
 </div>
 
@@ -289,6 +317,26 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
   <div class="tip-mi" id="tip-mi"></div>
   <div id="tip-body"></div>
 </div>
+<!-- TREND SCREEN -->
+<div id="trend-screen">
+  <button class="trend-back" onclick="showScreen('picker')">← Back to activities</button>
+  <div class="trend-header">
+    <h2>Aerobic Efficiency Over Time</h2>
+    <p>Higher = better. Speed (m/s) ÷ Heart Rate × 1000</p>
+  </div>
+  <div class="trend-tab-row" id="trend-tabs">
+    <button class="dtab" data-min="4000"  data-max="6500"  onclick="setTrendDist(this)">5K</button>
+    <button class="dtab" data-min="8500"  data-max="12000" onclick="setTrendDist(this)">10K</button>
+    <button class="dtab" data-min="14500" data-max="18000" onclick="setTrendDist(this)">10 mi</button>
+    <button class="dtab active" data-min="18000" data-max="24000" onclick="setTrendDist(this)">Half Marathon</button>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Aerobic Efficiency Trend</div>
+    <svg id="trend-svg" style="width:100%;height:260px"></svg>
+  </div>
+  <div id="trend-list" style="margin-top:12px;display:flex;flex-direction:column;gap:6px"></div>
+</div>
+
 <div id="dbg"></div>
 
 <script>
@@ -303,7 +351,7 @@ const S = {
 };
 
 function showScreen(n) {
-  ['setup','callback','picker','viz'].forEach(s => document.getElementById(s+'-screen').style.display='none');
+  ['setup','callback','picker','viz','trend'].forEach(s => document.getElementById(s+'-screen').style.display='none');
   document.getElementById(n+'-screen').style.display='flex';
 }
 function setDist(btn) {
@@ -335,6 +383,33 @@ function dbg(m) {
 }
 function showErr(id,m){const e=document.getElementById(id);e.textContent=m;e.style.display='block';}
 function hideErr(id){document.getElementById(id).style.display='none';}
+// ── AEROBIC EFFICIENCY ──────────────────────────────────────────────────────
+// AE = avg_speed_ms / avg_hr * 1000  (higher = better)
+function calcAE(act) {
+  if (!act.average_heartrate || !act.average_speed) return null;
+  return (act.average_speed / act.average_heartrate * 1000).toFixed(2);
+}
+function calcAEfromStreams(pace, hr, time_s) {
+  // pace is min/mi, convert to m/s: speed_ms = 26.8224 / pace_min_per_mi
+  // ae per point = speed_ms / hr * 1000
+  if (!pace || !hr) return null;
+  const out = [];
+  for (let i = 0; i < pace.length; i++) {
+    if (pace[i] && pace[i] < 20 && hr[i] > 0) {
+      const speed_ms = 26.8224 / pace[i];
+      out.push(speed_ms / hr[i] * 1000);
+    } else {
+      out.push(null);
+    }
+  }
+  return out;
+}
+function avgAE(aeArr) {
+  if (!aeArr) return null;
+  const v = aeArr.filter(x => x != null);
+  return v.length ? (v.reduce((a,b)=>a+b,0)/v.length).toFixed(2) : null;
+}
+
 const WORKOUT_TYPES = {
   0: null, 1: 'Race', 2: 'Long Run', 3: 'Workout',
   10: 'Default', 11: 'Race', 12: 'Long Run', 13: 'Workout'
@@ -453,7 +528,9 @@ function renderList(acts) {
     const wLabel=workoutLabel(a.workout_type);
     const badge=wLabel?`<span class="wtype-badge">${wLabel}</span>`:'';
     const hrFlag=a.has_heartrate?`<span class="hr-flag" title="Heart rate data">♥</span>`:'';
-    el.innerHTML=`<div class="act-left"><div class="check"></div><div><div class="act-name">${a.name} ${badge}${hrFlag}</div><div class="act-date">${date}</div></div></div><div class="act-stats"><div class="act-dist">${mi} mi</div><div class="act-time">${fmtTime(a.moving_time)}</div></div>`;
+    const ae=calcAE(a);
+    const aeBadge=ae?`<span class="ae-badge" title="Aerobic Efficiency">AE ${ae}</span>`:'';
+    el.innerHTML=`<div class="act-left"><div class="check"></div><div><div class="act-name">${a.name} ${badge}${hrFlag}${aeBadge}</div><div class="act-date">${date}</div></div></div><div class="act-stats"><div class="act-dist">${mi} mi</div><div class="act-time">${fmtTime(a.moving_time)}</div></div>`;
     el.onclick=()=>toggleSel(a.id,el);
     list.appendChild(el);
     // Color race badges
@@ -490,7 +567,9 @@ async function loadSelected() {
     const time_s=d.time.data;
     const hrSmooth=smoothHRbyTime(hr,time_s,300);
     const paceSmooth=smoothPaceByTime(pace,time_s,60); // 1-min rolling average for pace
-    races.push({act,dist_mi,alt_ft,pace:paceSmooth,hr:hrSmooth,time_s,n,color:COLORS[i%COLORS.length],workoutType:act.workout_type});
+    const aeArr = calcAEfromStreams(paceSmooth, hrSmooth, time_s);
+    const aeSmooth = smoothArr(aeArr ? aeArr.map(v=>v||0) : null, 20);
+    races.push({act,dist_mi,alt_ft,pace:paceSmooth,hr:hrSmooth,ae:aeSmooth,time_s,n,color:COLORS[i%COLORS.length],workoutType:act.workout_type});
     dbg(`  ${act.name}: ${n} points`);
   }
   document.getElementById('load-streams').style.display='none';
@@ -529,7 +608,7 @@ function initViz() {
     inp.addEventListener('input',e=>{
       const idx=parseInt(e.target.dataset.idx);
       S.races[idx].color=e.target.value;
-      drawCharts(); attachHover(); renderProgress(S.progress);
+      drawCharts(); attachHover(); renderProgress(S.progress); if(document.getElementById('trend-screen').style.display!=='none') drawTrend();
     });
   });
   document.querySelectorAll('.wtype-badge').forEach(b=>{ if(b.textContent==='Race') b.classList.add('wtype-race'); });
@@ -540,11 +619,22 @@ function initViz() {
       btn.textContent=S.races[idx].hidden?'○':'◉';
       btn.style.opacity=S.races[idx].hidden?'0.35':'1';
       btn.closest('.race-pill').style.opacity=S.races[idx].hidden?'0.45':'1';
-      drawCharts(); attachHover(); renderProgress(S.progress);
+      drawCharts(); attachHover(); renderProgress(S.progress); if(document.getElementById('trend-screen').style.display!=='none') drawTrend();
     });
   });
   // Show HR card if any race has HR data
   document.getElementById('hr-card').style.display = S.races.some(r=>r.hr) ? '' : 'none';
+  document.getElementById('ae-card').style.display = S.races.some(r=>r.ae) ? '' : 'none';
+  // AE comparison summary
+  const aeComp = document.getElementById('ae-comparison');
+  const aeBars = document.getElementById('ae-bars');
+  const racesWithAE = S.races.filter(r=>r.ae && !r.hidden);
+  if (racesWithAE.length > 1) {
+    aeComp.style.display = 'block';
+    renderAEBars();
+  } else {
+    aeComp.style.display = 'none';
+  }
   // Show pace/hr/elev stats only for single race
   const single = S.races.length === 1;
   document.querySelectorAll('.ls-single').forEach(el => el.style.display = single ? '' : 'none');
@@ -571,7 +661,7 @@ function mkPath(xs,ys){
   return d;
 }
 
-function drawCharts(){ drawElev(); drawPace(); drawHR(); }
+function drawCharts(){ drawElev(); drawPace(); drawHR(); drawAE(); }
 
 function drawElev(){
   const W=svgW('esvg'), H=148, PL=46,PR=12,PT=8,PB=24;
@@ -687,11 +777,86 @@ function drawHR(){
   document.getElementById('hrsvg').outerHTML=h;
 }
 
+// ── AEROBIC EFFICIENCY CHART ──────────────────────────────────────────────────
+function drawAE(){
+  const el=document.getElementById('aesvg'); if(!el) return;
+  const hasAE=S.races.some(r=>!r.hidden&&r.ae); if(!hasAE) return;
+  const W=svgW('aesvg'), H=110, PL=46,PR=12,PT=8,PB=24;
+  const cw=W-PL-PR, ch=H-PT-PB;
+  let aeMn=Infinity,aeMx=-Infinity;
+  S.races.forEach(r=>{if(!r.hidden&&r.ae)r.ae.forEach(v=>{if(v&&v>0){if(v<aeMn)aeMn=v;if(v>aeMx)aeMx=v;}});});
+  if(!isFinite(aeMn)){aeMn=1;aeMx=5;}
+  aeMn=Math.max(0,aeMn-0.2); aeMx=aeMx+0.2;
+  const maxD=Math.max(...S.races.filter(r=>!r.hidden).map(r=>r.dist_mi[r.n-1]));
+  const xS=d=>PL+(d/maxD)*cw;
+  const yA=v=>PT+ch-((v-aeMn)/(aeMx-aeMn))*ch;
+
+  let h=`<svg id="aesvg" viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">`;
+  const yMid=yA((aeMn+aeMx)/2);
+  h+=`<rect x="${PL}" y="${PT}" width="${cw}" height="${yMid-PT}" fill="#f0fdf4" opacity="0.5"/>`;
+  niceTicks(aeMn,aeMx,4).forEach(v=>{
+    const y=yA(v);
+    h+=`<line class="grid-line" x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}"/>`;
+    h+=`<text class="axis-text" x="${PL-5}" y="${y+3}" text-anchor="end">${parseFloat(v).toFixed(1)}</text>`;
+  });
+  mileTicks(maxD).forEach(m=>{ h+=`<text class="axis-text" x="${xS(m)}" y="${H-5}" text-anchor="middle">${m}</text>`; });
+  S.races.forEach(r=>{
+    if(r.hidden||!r.ae) return;
+    const xs=r.dist_mi.map(xS);
+    const ys=r.ae.map(v=>v&&v>0?yA(v):null);
+    h+=`<path d="${mkPath(xs,ys)}" fill="none" stroke="${r.color}" stroke-width="1.2" opacity="0.12" stroke-linecap="round"/>`;
+    const uid=`aec${r.act.id}`;
+    h+=`<defs><clipPath id="${uid}"><rect id="${uid}r" x="${PL}" y="0" width="0" height="${H}"/></clipPath></defs>`;
+    h+=`<g clip-path="url(#${uid})"><path d="${mkPath(xs,ys)}" fill="none" stroke="${r.color}" stroke-width="2.2" stroke-linecap="round"/></g>`;
+    const sy=ys[0]!=null?ys[0]:PT+ch/2;
+    h+=`<circle id="rae${r.act.id}" cx="${xs[0]}" cy="${sy}" r="5" fill="${r.color}" stroke="white" stroke-width="2" style="filter:drop-shadow(0 0 4px ${r.color}99)"/>`;
+  });
+  h+=`<line id="aevl" x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="#1c1c1c" stroke-width="1.5" stroke-dasharray="4 3" opacity="0"/>`;
+  h+='</svg>';
+  document.getElementById('aesvg').outerHTML=h;
+}
+
+function renderAEBars(){
+  const bars=document.getElementById('ae-bars'); if(!bars) return;
+  const visible=S.races.filter(r=>!r.hidden&&r.ae);
+  if(!visible.length){ document.getElementById('ae-comparison').style.display='none'; return; }
+  const scores=visible.map(r=>({
+    name:r.act.name, color:r.color,
+    score:parseFloat(avgAE(r.ae))||0,
+    date:new Date(r.act.start_date_local).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+  }));
+  scores.sort((a,b)=>b.score-a.score);
+  const maxScore=scores[0].score;
+  bars.innerHTML=scores.map((s,i)=>`
+    <div class="ae-bar-row">
+      <div class="ae-bar-name" style="color:${s.color}" title="${s.name}">${i===0?'🏆 ':''}${s.name.length>16?s.name.slice(0,15)+'…':s.name}</div>
+      <div class="ae-bar-track"><div class="ae-bar-fill" style="width:${(s.score/maxScore*100).toFixed(1)}%;background:${s.color}"></div></div>
+      <div class="ae-bar-val" style="color:${s.color}">${s.score.toFixed(2)}</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--ink-muted);margin-left:4px">${s.date}</div>
+    </div>`).join('');
+}
+
+// AE dot render — called from renderProgress
+function renderAEDot(r, idx, maxD, pcw, PL, PT){
+  const aecr=document.getElementById(`aec${r.act.id}r`);
+  const dFrac=r.dist_mi[idx]/maxD;
+  if(aecr) aecr.setAttribute('width', dFrac*pcw);
+  if(!r.ae) return;
+  const aeSVG=document.getElementById('aesvg'); if(!aeSVG) return;
+  const aW=aeSVG.getBoundingClientRect().width||800, aCW=aW-PL-12;
+  const xAE=PL+(r.dist_mi[idx]/maxD)*aCW;
+  // Use global AE extent (gAEMn/gAEMx set in renderProgress)
+  const aH=110, aPB=24, aCH=aH-PT-aPB;
+  const yAE=r.ae[idx]&&r.ae[idx]>0?PT+aCH-((r.ae[idx]-window._gAEMn)/(window._gAEMx-window._gAEMn))*aCH:PT+aCH/2;
+  const rae=document.getElementById(`rae${r.act.id}`);
+  if(rae){rae.setAttribute('cx',xAE);rae.setAttribute('cy',yAE);}
+}
+
 // HOVER
 function syncCrosshair(frac){
   // Move all three vlines to the same fractional position
   if(frac===null){
-    ['evl','pvl','hrvl'].forEach(id=>{
+    ['evl','pvl','hrvl','aevl'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.setAttribute('opacity','0');
     });
     return;
@@ -831,6 +996,12 @@ function renderProgress(frac){
   S.races.forEach(r=>{if(!r.hidden&&r.hr)r.hr.forEach(h=>{if(h&&h>0){if(h<gHMn)gHMn=h;if(h>gHMx)gHMx=h;}});});
   if(!isFinite(gHMn)){gHMn=120;gHMx=200;}
   gHMn=gHMn-5; gHMx=gHMx+5;
+  // Global AE extent — must match drawAE exactly
+  let gAEMn=Infinity,gAEMx=-Infinity;
+  S.races.forEach(r=>{if(!r.hidden&&r.ae)r.ae.forEach(v=>{if(v&&v>0){if(v<gAEMn)gAEMn=v;if(v>gAEMx)gAEMx=v;}});});
+  if(!isFinite(gAEMn)){gAEMn=1;gAEMx=5;}
+  gAEMn=Math.max(0,gAEMn-0.2); gAEMx=gAEMx+0.2;
+  window._gAEMn=gAEMn; window._gAEMx=gAEMx;
 
   S.races.forEach(r=>{
     if(r.hidden) return;
@@ -876,11 +1047,12 @@ function renderProgress(frac){
   // Vlines from first race
   const r0=S.races[0], i0=Math.round(frac*(r0.n-1));
   const xE0=PL+(r0.dist_mi[i0]/maxD)*ecw, xP0=PL+(r0.dist_mi[i0]/maxD)*pcw;
-  const evl=document.getElementById('evl'), pvl=document.getElementById('pvl'), hrvl=document.getElementById('hrvl');
+  const evl=document.getElementById('evl'), pvl=document.getElementById('pvl'), hrvl=document.getElementById('hrvl'), aevl=document.getElementById('aevl');
   const vlOp=frac>0?'0.35':'0';
   if(evl){evl.setAttribute('x1',xE0);evl.setAttribute('x2',xE0);evl.setAttribute('opacity',vlOp);}
   if(pvl){pvl.setAttribute('x1',xP0);pvl.setAttribute('x2',xP0);pvl.setAttribute('opacity',vlOp);}
   if(hrvl){hrvl.setAttribute('x1',xP0);hrvl.setAttribute('x2',xP0);hrvl.setAttribute('opacity',vlOp);}
+  if(aevl){aevl.setAttribute('x1',xP0);aevl.setAttribute('x2',xP0);aevl.setAttribute('opacity',vlOp);}
 
   // ── Crosshair bar ────────────────────────────────────────────────────────────
   const bar=document.getElementById('crosshair-bar');
@@ -926,6 +1098,100 @@ function updateStats(idx){
   document.getElementById('ls-elev').innerHTML=r.alt_ft?`${Math.round(r.alt_ft[i])}<span style="font-size:11px;color:var(--ink-muted)"> ft</span>`:'—';
   document.getElementById('ls-pace').textContent=r.pace&&r.pace[i]&&r.pace[i]<20?fmtPace(r.pace[i]):'—';
   document.getElementById('ls-hr').innerHTML=r.hr&&r.hr[i]>0?`${r.hr[i]}<span style="font-size:11px;color:var(--ink-muted)"> bpm</span>`:'—';
+}
+
+// ── TREND SCREEN ──────────────────────────────────────────────────────────────
+let trendDistMin=18000, trendDistMax=24000;
+
+function setTrendDist(btn){
+  trendDistMin=parseInt(btn.dataset.min);
+  trendDistMax=parseInt(btn.dataset.max);
+  document.querySelectorAll('#trend-tabs .dtab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  drawTrend();
+}
+
+function showTrend(){
+  showScreen('trend');
+  drawTrend();
+}
+
+function drawTrend(){
+  const runs=S.activities.filter(a=>{
+    const isRun=['Run','VirtualRun','TrailRun'].includes(a.type)||(a.sport_type||'').toLowerCase().includes('run');
+    return isRun && a.distance>=trendDistMin && a.distance<=trendDistMax && a.has_heartrate && a.average_heartrate && a.average_speed;
+  }).sort((a,b)=>new Date(a.start_date_local)-new Date(b.start_date_local));
+
+  const list=document.getElementById('trend-list');
+
+  if(!runs.length){
+    document.getElementById('trend-svg').outerHTML='<svg id="trend-svg" style="width:100%;height:260px"></svg>';
+    list.innerHTML='<p style="color:var(--ink-muted);font-size:13px;padding:10px 0">No runs with heart rate data found for this distance.</p>';
+    return;
+  }
+
+  const aeScores=runs.map(a=>({
+    date: new Date(a.start_date_local),
+    ae: parseFloat(calcAE(a)),
+    name: a.name,
+    dist: (a.distance/1609.34).toFixed(1),
+    wt: a.workout_type
+  }));
+
+  const W=svgW('trend-svg')||800, H=260, PL=52,PR=20,PT=20,PB=40;
+  const cw=W-PL-PR, ch=H-PT-PB;
+  const minAE=Math.min(...aeScores.map(s=>s.ae))-0.2;
+  const maxAE=Math.max(...aeScores.map(s=>s.ae))+0.2;
+  const minT=aeScores[0].date.getTime(), maxT=aeScores[aeScores.length-1].date.getTime();
+  const xS=t=>PL+((t-minT)/(maxT-minT||1))*cw;
+  const yS=v=>PT+ch-((v-minAE)/(maxAE-minAE))*ch;
+
+  let h=`<svg id="trend-svg" viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">`;
+  // Green zone top
+  const yMid=yS((minAE+maxAE)/2);
+  h+=`<rect x="${PL}" y="${PT}" width="${cw}" height="${yMid-PT}" fill="#f0fdf4" opacity="0.6" rx="4"/>`;
+  // Grid
+  niceTicks(minAE,maxAE,5).forEach(v=>{
+    const y=yS(v);
+    h+=`<line class="grid-line" x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}"/>`;
+    h+=`<text class="axis-text" x="${PL-5}" y="${y+3}" text-anchor="end">${parseFloat(v).toFixed(2)}</text>`;
+  });
+  // Trend line
+  let linePath='';
+  aeScores.forEach((s,i)=>{
+    linePath+=(i===0?'M':'L')+xS(s.date.getTime()).toFixed(1)+','+yS(s.ae).toFixed(1)+' ';
+  });
+  h+=`<path d="${linePath}" fill="none" stroke="#16a34a" stroke-width="2" opacity="0.3" stroke-linecap="round" stroke-linejoin="round"/>`;
+  // Points
+  aeScores.forEach((s,i)=>{
+    const x=xS(s.date.getTime()), y=yS(s.ae);
+    const isRace=s.wt===1||s.wt===11;
+    h+=`<circle cx="${x}" cy="${y}" r="${isRace?7:5}" fill="${isRace?'#fc4c02':'#16a34a'}" stroke="white" stroke-width="2" style="cursor:pointer" opacity="0.9">
+      <title>${s.name}
+${s.date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} · ${s.dist} mi · AE ${s.ae.toFixed(2)}</title>
+    </circle>`;
+    // Date label every few points
+    if(i===0||i===aeScores.length-1||isRace){
+      const lbl=s.date.toLocaleDateString('en-US',{month:'short',year:'2-digit'});
+      h+=`<text class="axis-text" x="${x}" y="${H-8}" text-anchor="middle">${lbl}</text>`;
+    }
+  });
+  // Best / latest annotation
+  const best=aeScores.reduce((a,b)=>b.ae>a.ae?b:a);
+  h+=`<text style="font-family:'DM Mono',monospace;font-size:10px;fill:#16a34a;font-weight:500" x="${xS(best.date.getTime())}" y="${yS(best.ae)-12}" text-anchor="middle">BEST ${best.ae.toFixed(2)}</text>`;
+  h+='</svg>';
+  document.getElementById('trend-svg').outerHTML=h;
+
+  // List below chart
+  const sorted=[...aeScores].sort((a,b)=>b.ae-a.ae);
+  list.innerHTML=sorted.map((s,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:white;border-radius:10px;border:1px solid var(--grid)">
+      <span style="font-family:var(--mono);font-size:11px;color:var(--ink-muted);min-width:18px">${i+1}</span>
+      <span style="font-family:var(--mono);font-size:13px;font-weight:500;color:${i===0?'#16a34a':'var(--ink)'};flex:1">${s.name}</span>
+      ${s.wt===1||s.wt===11?'<span class="wtype-badge" style="background:#fff0eb;color:#fc4c02;border-color:#fdddd5">Race</span>':''}
+      <span style="font-family:var(--mono);font-size:10px;color:var(--ink-muted)">${s.date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+      <span class="ae-badge" style="${i===0?'background:#16a34a;color:white;border-color:#16a34a':''}">${i===0?'🏆 ':''}AE ${s.ae.toFixed(2)}</span>
+    </div>`).join('');
 }
 
 let rszT;

@@ -467,9 +467,13 @@ function filterAndRenderList() {
   });
   if(!filtered.length){
     document.getElementById('act-list').innerHTML=`<p style="color:var(--ink-muted);font-size:13px;padding:10px 0">No runs found for this distance in your history.</p>`;
+    document.getElementById('btn-trend').style.display='none';
   } else {
     renderList(filtered);
+    document.getElementById('btn-trend').style.display='inline-flex';
   }
+  const hasAny = S.activities.length > 0;
+  document.getElementById('btn-analytics').style.display = hasAny ? 'inline-flex' : 'none';
 }
 function dbg(m) {
   console.log(m);

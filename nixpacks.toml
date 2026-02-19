@@ -1,10 +1,8 @@
-[build]
-builder = "nixpacks"
-buildCommand = "npm install"
+[phases.setup]
+nixPkgs = ["nodejs_20", "nodePackages.npm"]
 
-[deploy]
-startCommand = "node server/index.js"
-healthcheckPath = "/health"
-healthcheckTimeout = 30
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
+[phases.install]
+cmds = ["npm install"]
+
+[start]
+cmd = "node server/index.js"

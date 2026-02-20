@@ -1462,7 +1462,7 @@ async function loadRacesScreen() {
       } else if (evMatches.length) {
         // Potential match — show activity + bib entry
         statusBadge = `<span class="race-event-badge badge-match">⚡ Likely match</span>`;
-        bodyHtml = evMatches.map(m => {
+        const matchRows = evMatches.map(m => {
           const actDist = (m.activity_distance_m / 1609.34).toFixed(2);
           const actDate = new Date(m.start_date_local).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
           return `
@@ -1471,13 +1471,14 @@ async function loadRacesScreen() {
                 <div class="act-title">↳ ${m.activity_name}</div>
                 <div class="act-sub">${actDate} · ${actDist} mi · ${fmtTime(m.moving_time_s)}</div>
               </div>
-            </div>
+            </div>`;
+        }).join('');
+        bodyHtml = matchRows + `
             <div class="bib-claim-row" id="claim-row-${ev.id}">
               <input type="text" placeholder="Enter your bib #" id="bib-${ev.id}" onkeydown="if(event.key==='Enter')claimBib(${ev.id})">
               <button class="race-match-claim" onclick="claimBib(${ev.id})">Claim Result</button>
             </div>
             <div id="bib-result-${ev.id}"></div>`;
-        }).join('');
       } else {
         // No match
         statusBadge = `<span class="race-event-badge badge-none">No match found</span>`;

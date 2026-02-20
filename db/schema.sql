@@ -96,7 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_streams_activity ON streams(activity_id);
 CREATE TABLE IF NOT EXISTS race_events (
   id                  SERIAL PRIMARY KEY,
   sporthive_event_id  VARCHAR(50) NOT NULL,
-  sporthive_race_id   VARCHAR(20) NOT NULL,
+  sporthive_race_id   VARCHAR(100) NOT NULL,
   event_name          VARCHAR(200),
   race_name           VARCHAR(200),
   event_date          DATE,
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS race_finishers (
   gender_rank     INT,
   age_group_rank  INT,
   chip_time_s     INT,          -- finish time in seconds
-  country_code    VARCHAR(20),
+  country_code    VARCHAR(200),
   athlete_id      BIGINT REFERENCES athletes(strava_id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
@@ -134,4 +134,4 @@ ALTER TABLE activities ADD COLUMN IF NOT EXISTS start_lat    FLOAT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS start_lng    FLOAT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS temp_c       FLOAT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS humidity_pct INT;
-ALTER TABLE race_finishers ALTER COLUMN country_code TYPE VARCHAR(20);
+ALTER TABLE race_finishers ALTER COLUMN country_code TYPE VARCHAR(200);

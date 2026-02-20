@@ -4,6 +4,39 @@ const { query, queryOne } = require('../db/client');
 
 const RATE_LIMIT_MS = 300;
 
+// ── Get session key + actual subdomain from the event page ───────────────────
+// The key is a hex string embedded in the page HTML, and the API may be on my2/my3/etc
+async function getEventKey(eventId) {
+  // Fetch the canonical page — my.raceresult.com redirects to myN.raceresult.com
+  const pageUrl = `https://my.raceresult.com/${eventId}/`;
+  const res = await fetch(pageUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept': 'text/html',
+    },
+    timeout: 15000,
+    redirect: 'follow',
+  });
+  const html = await res.text();
+  // Capture the actual host we landed on (e.g. my3.raceresult.com)
+  const finalHost = new URL(res.url).host;
+
+  // Extract hex key — pattern: key":"94cf5045a053c3be3c3a675b7bdca3cf"
+  const hexKeyPat = /["']key["']\s*:\s*["']([0-9a-f]{20,})["']/i;
+  const hexKeyPat2 = /[?&]key=([0-9a-f]{20,})/i;
+  const hexKeyPat3 = /RRPublish[^"']*["']([0-9a-f]{20,})["']/i;
+
+  for (const pat of [hexKeyPat, hexKeyPat2, hexKeyPat3]) {
+    const m = html.match(pat);
+    if (m) {
+      console.log(`  Key: ${m[1]}, Host: ${finalHost}`);
+      return { key: m[1], host: finalHost };
+    }
+  }
+
+  throw new Error('Could not extract RaceResult key from page HTML');
+}
+
 // ── Parse event ID from any my.raceresult.com URL ─────────────────────────────
 function parseRaceResultUrl(url) {
   const m = url.match(/my\.raceresult\.com\/(\d+)/);
@@ -35,63 +68,67 @@ function fmtTime(s) {
 
 // ── Fetch one page of the list for a specific group ───────────────────────────
 // groupby params control which contest/gender/agegroup is shown
-async function fetchPage(eventId, listname, groupFilters, numResults, page) {
-  // Build query string manually — URLSearchParams encodes | as %7C which RaceResult rejects
-  const parts = [
-    `listname=${encodeURIComponent(listname)}`,
-    `num_results=${numResults || 500}`,
-    `page=${page || 1}`,
-  ];
+async function fetchPage(eventId, listname, groupFilters, numResults, page, keyInfo) {
+  const key  = keyInfo?.key  || keyInfo;
+  const host = keyInfo?.host || 'my.raceresult.com';
 
-  // Add group filters (f0, f1, f2...)
+  // Use URLSearchParams — browser DOES encode | as %7C (confirmed from actual URL)
+  const params = new URLSearchParams({
+    key: key || '',
+    listname,
+    page: page || 1,
+    contest: 0,
+    r: 'all',
+    l: numResults || 500,
+    openedGroups: '{}',
+    term: '',
+  });
+
+  // Add group filters
   if (groupFilters) {
     Object.entries(groupFilters).forEach(([k, v]) => {
-      if (v !== undefined && v !== null) parts.push(`${k}=${encodeURIComponent(v)}`);
+      if (v !== undefined && v !== null) params.set(k, v);
     });
   }
 
-  const url = `https://my.raceresult.com/${eventId}/RRPublish/data/list?${parts.join('&')}`;
+  const url = `https://${host}/${eventId}/RRPublish/data/list?${params}`;
   console.log(`  Fetching: ${url}`);
 
   const res = await fetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       'Accept': 'application/json, text/javascript, */*',
-      'Referer': `https://my.raceresult.com/${eventId}/`,
-      'X-Requested-With': 'XMLHttpRequest',
+      'Referer': `https://${host}/${eventId}/`,
     },
     timeout: 20000,
   });
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`RaceResult API ${res.status}: ${body.slice(0, 200)}`);
+    throw new Error(`RaceResult API ${res.status}: ${body.slice(0,300)}`);
   }
   return res.json();
 }
 
 // ── Discover the list name and structure ──────────────────────────────────────
-async function discoverEvent(eventId) {
-  // Try common list names
+async function discoverEvent(eventId, key) {
   const candidates = ['Online|Final', 'Results|All', 'Online|Results', 'Results|Final', 'Online|All'];
 
   for (const listname of candidates) {
     try {
-      const data = await fetchPage(eventId, listname, {}, 5, 1);
+      const data = await fetchPage(eventId, listname, {}, 5, 1, key);
       if (data.data && Object.keys(data.data).length > 0) {
         return {
           listname,
           dataFields: data.DataFields || [],
           groupFilters: data.groupFilters || [],
-          contests: (data.groupFilters || [])
-            .filter(g => g.Type === 1)
-            .flatMap(g => g.Values.filter(Boolean)),
+          key,
         };
       }
-    } catch(e) { /* try next */ }
+    } catch(e) { console.log(`  Tried ${listname}: ${e.message}`); }
     await new Promise(r => setTimeout(r, RATE_LIMIT_MS));
   }
-  throw new Error('Could not find results list — try providing the listname manually');
+  throw new Error('Could not find results list — enter the list name manually (e.g. Online|Final)');
 }
 
 // ── Extract finishers from the nested data structure ──────────────────────────
@@ -143,7 +180,7 @@ function extractFinishers(data, dataFields) {
 }
 
 // ── Fetch ALL finishers across all pages ──────────────────────────────────────
-async function fetchAllFinishers(eventId, listname, dataFields, groupFilters, onProgress) {
+async function fetchAllFinishers(eventId, listname, dataFields, groupFilters, onProgress, key) {
   const PAGE_SIZE = 500; // RaceResult supports large pages
   const all = [];
 
@@ -155,7 +192,7 @@ async function fetchAllFinishers(eventId, listname, dataFields, groupFilters, on
     let page = 1;
     while (true) {
       const filters = contest ? { f0: contest } : {};
-      const result = await fetchPage(eventId, listname, filters, PAGE_SIZE, page);
+      const result = await fetchPage(eventId, listname, filters, PAGE_SIZE, page, key);
 
       if (!result.data || !Object.keys(result.data).length) break;
 
@@ -209,18 +246,24 @@ async function importRaceResult({ url, eventName, raceName, eventDate, distanceM
     };
   }
 
+  // Get session key + actual host first
+  console.log(`Getting RaceResult session key for event ${eventId}...`);
+  const keyInfo = await getEventKey(eventId);
+  console.log(`  Key: ${keyInfo.key}, Host: ${keyInfo.host}`);
+
   // Discover list structure
-  console.log(`Discovering RaceResult event ${eventId}...`);
+  console.log(`Discovering list for event ${eventId}...`);
   let discovery;
   if (manualListname) {
-    const probe = await fetchPage(eventId, manualListname, {}, 5, 1);
+    const probe = await fetchPage(eventId, manualListname, {}, 5, 1, keyInfo);
     discovery = {
       listname: manualListname,
       dataFields: probe.DataFields || [],
       groupFilters: probe.groupFilters || [],
+      key: keyInfo,
     };
   } else {
-    discovery = await discoverEvent(eventId);
+    discovery = await discoverEvent(eventId, keyInfo);
   }
 
   console.log(`Using list: ${discovery.listname}`);
@@ -233,7 +276,8 @@ async function importRaceResult({ url, eventName, raceName, eventDate, distanceM
     discovery.listname,
     discovery.dataFields,
     discovery.groupFilters,
-    n => { progress = n; console.log(`  Fetched ${n}...`); }
+    n => { progress = n; console.log(`  Fetched ${n}...`); },
+    discovery.key
   );
 
   if (!finishers.length) throw new Error('No finishers found');

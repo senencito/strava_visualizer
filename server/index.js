@@ -369,6 +369,53 @@ app.get('/api/race-matches', requireAuth, async (req, res) => {
   }
 });
 
+// ── Debug: see what race events exist and what activities might match ──────────
+app.get('/api/race-matches/debug', requireAuth, async (req, res) => {
+  const events = await query(`SELECT id, event_name, event_date, distance_m FROM race_events ORDER BY event_date DESC`);
+  const recentActs = await query(
+    `SELECT strava_id, name, start_date_local, distance_m FROM activities
+     WHERE athlete_id=$1 ORDER BY start_date_local DESC LIMIT 20`,
+    [req.session.athleteId]
+  );
+  res.json({ race_events: events, recent_activities: recentActs });
+});
+
+// ── Admin: backfill weather for activities missing it ─────────────────────────
+app.post('/api/admin/backfill-weather', requireAdmin, async (req, res) => {
+  const { importRaceResult: _unused, ...rest } = {}; // just to avoid lint
+  res.writeHead(200, { 'Content-Type': 'text/plain', 'Transfer-Encoding': 'chunked' });
+
+  try {
+    // Get activities missing weather that have lat/lon stored
+    const acts = await query(`
+      SELECT a.strava_id, a.athlete_id, a.start_date, a.start_lat, a.start_lng
+      FROM activities a
+      WHERE a.temp_c IS NULL AND a.start_lat IS NOT NULL
+      ORDER BY a.start_date DESC
+    `);
+    res.write(`Found ${acts.length} activities with lat/lon but no weather\n`);
+
+    let updated = 0;
+    for (const act of acts) {
+      try {
+        const { fetchWeather } = require('./strava');
+        const { temp_c, humidity_pct } = await fetchWeather(act.start_lat, act.start_lng, act.start_date);
+        if (temp_c != null) {
+          await query(`UPDATE activities SET temp_c=$1, humidity_pct=$2 WHERE strava_id=$3`,
+            [temp_c, humidity_pct, act.strava_id]);
+          updated++;
+          if (updated % 10 === 0) res.write(`Updated ${updated}/${acts.length}...\n`);
+        }
+        await new Promise(r => setTimeout(r, 200)); // rate limit
+      } catch(e) { res.write(`Error on ${act.strava_id}: ${e.message}\n`); }
+    }
+    res.write(`Done. Updated ${updated} activities.\n`);
+  } catch(e) {
+    res.write(`Error: ${e.message}\n`);
+  }
+  res.end();
+});
+
 // ── Athlete profile (includes email) ──────────────────────────────────────────
 app.get('/api/me', requireAuth, async (req, res) => {
   const athlete = await queryOne(

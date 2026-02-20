@@ -466,6 +466,8 @@ function setDist(btn) {
   S.selectedIds.clear();
   document.getElementById('btn-viz').style.display='none';
   filterAndRenderList();
+  // Check for race matches on load too
+  fetch('/api/race-matches').then(r=>r.json()).then(m=>{ if(m?.length) showRaceMatches(m); }).catch(()=>{});
 }
 function filterAndRenderList() {
   const filtered = S.activities.filter(a => {
@@ -633,6 +635,7 @@ async function doSync() {
       msg.style.display = 'inline';
       msg.textContent = d.new_activities > 0 ? `+${d.new_activities} new` : 'Up to date';
       setTimeout(() => { msg.style.display = 'none'; }, 4000);
+      if (d.race_matches?.length) showRaceMatches(d.race_matches);
     }
 
     debugLog('Fetching activities from DB...');
@@ -703,9 +706,23 @@ function renderList(acts) {
     const hrFlag=a.has_heartrate?`<span class="hr-flag" title="Heart rate data">♥</span>`:'';
     const ae=a.ae_score ? parseFloat(a.ae_score).toFixed(2) : calcAE(a);
     const aeBadge=ae?`<span class="ae-badge" title="Aerobic Efficiency">AE ${ae}</span>`:'';
+    // Weather icon logic
+    let weatherHtml = '';
+    if (a.temp_c != null) {
+      const tempF = Math.round(a.temp_c * 9/5 + 32);
+      const humidity = a.humidity_pct;
+      // Sun/cloud icon based on temp + humidity heuristic
+      const weatherIcon = (a.temp_c > 28 && (!humidity || humidity < 60)) ? '☀️'
+                        : (a.temp_c > 22) ? '⛅'
+                        : (humidity && humidity > 80) ? '🌧️'
+                        : '🌤️';
+      const humidStr = humidity != null ? ` · 💧${humidity}%` : '';
+      weatherHtml = `<span class="weather-tag"><span class="w-icon">${weatherIcon}</span>${tempF}°F${humidStr}</span>`;
+    }
     el.innerHTML=`<div class="act-left"><div class="check"></div><div>
       <div class="act-name">${a.name} ${badge}${hrFlag}${aeBadge}</div>
       <div class="act-date">${date}</div>
+      ${weatherHtml}
       <div class="shoe-tag" id="shoe-${a.id}"></div>
     </div></div><div class="act-stats"><div class="act-dist">${mi} mi</div><div class="act-time">${fmtTime(a.moving_time)}</div></div>`;
     el.onclick=()=>toggleSel(a.id,el);
@@ -724,6 +741,72 @@ function toggleSel(id,el) {
   if(S.selectedIds.has(id)){S.selectedIds.delete(id);el.classList.remove('selected');}
   else{S.selectedIds.add(id);el.classList.add('selected');}
   document.getElementById('btn-viz').style.display=S.selectedIds.size>0?'inline-flex':'none';
+}
+
+// ── Race match banner ────────────────────────────────────────────────────────
+function showRaceMatches(matches) {
+  const banner = document.getElementById('race-match-banner');
+  const list   = document.getElementById('race-match-list');
+  if (!matches.length) return;
+
+  list.innerHTML = matches.map(m => {
+    const dist = ((m.race_distance_m || 0) / 1609.34).toFixed(1);
+    const date = m.event_date ? new Date(m.event_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '';
+    return `
+      <div class="race-match-item" id="match-${m.race_event_id}">
+        <div class="race-match-info">
+          <strong>${m.event_name}</strong><br>
+          <small>${date} · ${dist} mi · ${m.location || ''}</small><br>
+          <small style="color:#666">Matched to: ${m.activity_name}</small>
+          <div class="race-match-bib-row" id="bib-row-${m.race_event_id}" style="display:none">
+            <input type="text" placeholder="Enter your bib #" id="bib-input-${m.race_event_id}">
+            <button class="race-match-claim" onclick="submitBib(${m.race_event_id})">Submit</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <button class="race-match-claim" onclick="showBibInput(${m.race_event_id})">Enter Bib #</button>
+          <button style="background:transparent;border:none;font-size:11px;color:var(--ink-muted);cursor:pointer" onclick="dismissMatch(${m.race_event_id})">Not me</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  banner.style.display = 'block';
+}
+
+function showBibInput(raceEventId) {
+  document.getElementById(`bib-row-${raceEventId}`).style.display = 'flex';
+}
+
+async function submitBib(raceEventId) {
+  const bib = document.getElementById(`bib-input-${raceEventId}`).value.trim();
+  if (!bib) { alert('Please enter your bib number'); return; }
+  try {
+    const res = await fetch(`/api/races/${raceEventId}/claim`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bib }),
+    });
+    const d = await res.json();
+    if (!res.ok) { alert(d.error || 'Could not claim result'); return; }
+    const item = document.getElementById(`match-${raceEventId}`);
+    const dist = ((d.race_distance_m || 0)/1609.34).toFixed(1);
+    item.innerHTML = `<div style="padding:8px 0;font-size:13px">
+      🏅 <strong>${d.event_name}</strong> — Bib #${bib} claimed!<br>
+      <small style="color:var(--ink-muted)">
+        Overall: #${d.overall_rank} (top ${d.overall_pct}%) ·
+        ${d.age_group}: #${d.age_group_rank} (top ${d.age_group_pct}%)
+      </small>
+    </div>`;
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+function dismissMatch(raceEventId) {
+  document.getElementById(`match-${raceEventId}`)?.remove();
+  if (!document.getElementById('race-match-list').children.length) dismissRaceMatches();
+}
+
+function dismissRaceMatches() {
+  document.getElementById('race-match-banner').style.display = 'none';
 }
 
 // LOAD STREAMS

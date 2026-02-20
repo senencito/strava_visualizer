@@ -36,25 +36,37 @@ function fmtTime(s) {
 // ── Fetch one page of the list for a specific group ───────────────────────────
 // groupby params control which contest/gender/agegroup is shown
 async function fetchPage(eventId, listname, groupFilters, numResults, page) {
-  const params = new URLSearchParams({
-    listname,
-    num_results: numResults,
-    page,
-    // group filters: f0=contest, f1=gender, f2=agegroup — blank = all
-    ...(groupFilters || {}),
-  });
+  // Build query string manually — URLSearchParams encodes | as %7C which RaceResult rejects
+  const parts = [
+    `listname=${encodeURIComponent(listname)}`,
+    `num_results=${numResults || 500}`,
+    `page=${page || 1}`,
+  ];
 
-  const url = `https://my.raceresult.com/${eventId}/RRPublish/data/list?${params}`;
+  // Add group filters (f0, f1, f2...)
+  if (groupFilters) {
+    Object.entries(groupFilters).forEach(([k, v]) => {
+      if (v !== undefined && v !== null) parts.push(`${k}=${encodeURIComponent(v)}`);
+    });
+  }
+
+  const url = `https://my.raceresult.com/${eventId}/RRPublish/data/list?${parts.join('&')}`;
+  console.log(`  Fetching: ${url}`);
+
   const res = await fetch(url, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; SenenViz/1.0)',
-      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept': 'application/json, text/javascript, */*',
       'Referer': `https://my.raceresult.com/${eventId}/`,
+      'X-Requested-With': 'XMLHttpRequest',
     },
     timeout: 20000,
   });
 
-  if (!res.ok) throw new Error(`RaceResult API ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`RaceResult API ${res.status}: ${body.slice(0, 200)}`);
+  }
   return res.json();
 }
 
@@ -65,7 +77,7 @@ async function discoverEvent(eventId) {
 
   for (const listname of candidates) {
     try {
-      const data = await fetchPage(eventId, listname, {}, 1, 1);
+      const data = await fetchPage(eventId, listname, {}, 5, 1);
       if (data.data && Object.keys(data.data).length > 0) {
         return {
           listname,
@@ -143,7 +155,7 @@ async function fetchAllFinishers(eventId, listname, dataFields, groupFilters, on
     let page = 1;
     while (true) {
       const filters = contest ? { f0: contest } : {};
-      const result = await fetchPage(eventId, listname, { ...filters, num_results: PAGE_SIZE, page }, PAGE_SIZE, page);
+      const result = await fetchPage(eventId, listname, filters, PAGE_SIZE, page);
 
       if (!result.data || !Object.keys(result.data).length) break;
 
@@ -201,7 +213,7 @@ async function importRaceResult({ url, eventName, raceName, eventDate, distanceM
   console.log(`Discovering RaceResult event ${eventId}...`);
   let discovery;
   if (manualListname) {
-    const probe = await fetchPage(eventId, manualListname, {}, 1, 1);
+    const probe = await fetchPage(eventId, manualListname, {}, 5, 1);
     discovery = {
       listname: manualListname,
       dataFields: probe.DataFields || [],

@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS athletes (
   access_token    TEXT NOT NULL,
   refresh_token   TEXT NOT NULL,
   token_expires_at BIGINT NOT NULL, -- unix timestamp
+  email           VARCHAR(200),
   last_sync_at    TIMESTAMPTZ,      -- last time we fetched new activities
   created_at      TIMESTAMPTZ DEFAULT NOW(),
   updated_at      TIMESTAMPTZ DEFAULT NOW()
@@ -66,6 +67,8 @@ CREATE TABLE IF NOT EXISTS activities (
   has_heartrate   BOOLEAN DEFAULT FALSE,
   ae_score        FLOAT,   -- pre-computed avg aerobic efficiency
   map_polyline    TEXT,    -- summary polyline from Strava
+  temp_c          FLOAT,   -- temperature at start time (from Open-Meteo)
+  humidity_pct    INT,     -- relative humidity % at start time
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_activities_athlete ON activities(athlete_id);
@@ -122,3 +125,8 @@ CREATE INDEX IF NOT EXISTS idx_finishers_race     ON race_finishers(race_event_i
 CREATE INDEX IF NOT EXISTS idx_finishers_bib      ON race_finishers(bib, race_event_id);
 CREATE INDEX IF NOT EXISTS idx_finishers_athlete  ON race_finishers(athlete_id);
 CREATE INDEX IF NOT EXISTS idx_finishers_agegroup ON race_finishers(age_group);
+
+-- Migration: add columns if they don't exist yet (safe to run on existing DB)
+ALTER TABLE athletes   ADD COLUMN IF NOT EXISTS email        VARCHAR(200);
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS temp_c       FLOAT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS humidity_pct INT;

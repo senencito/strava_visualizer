@@ -4,6 +4,32 @@ const { query, queryOne } = require('../db/client');
 
 const STRAVA_BASE = 'https://www.strava.com/api/v3';
 
+// ── Weather fetch (Open-Meteo, free, no API key) ───────────────────────────────
+async function fetchWeather(lat, lon, isoDate) {
+  if (!lat || !lon) return { temp_c: null, humidity_pct: null };
+  try {
+    // Open-Meteo historical API — date must be YYYY-MM-DD
+    const date = isoDate.slice(0, 10);
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&hourly=temperature_2m,relativehumidity_2m&timezone=auto`;
+    const res = await fetch(url, { timeout: 8000 });
+    if (!res.ok) return { temp_c: null, humidity_pct: null };
+    const data = await res.json();
+
+    // Find the closest hour to the activity start time
+    const hour = parseInt(isoDate.slice(11, 13)) || 0;
+    const temps = data.hourly?.temperature_2m || [];
+    const humids = data.hourly?.relativehumidity_2m || [];
+
+    return {
+      temp_c:       temps[hour]  != null ? Math.round(temps[hour]  * 10) / 10 : null,
+      humidity_pct: humids[hour] != null ? Math.round(humids[hour]) : null,
+    };
+  } catch(e) {
+    console.warn('Weather fetch failed:', e.message);
+    return { temp_c: null, humidity_pct: null };
+  }
+}
+
 // ── Token management ──────────────────────────────────────────────────────────
 
 async function refreshTokenIfNeeded(athlete) {
@@ -90,17 +116,24 @@ async function syncActivities(athlete) {
         ? parseFloat((a.average_speed / a.average_heartrate * 1000).toFixed(4))
         : null;
 
+      // Fetch weather for this activity (start lat/lon from Strava summary)
+      const lat = a.start_latlng?.[0] || null;
+      const lon = a.start_latlng?.[1] || null;
+      const { temp_c, humidity_pct } = await fetchWeather(lat, lon, a.start_date);
+
       // Upsert activity
       await query(`
         INSERT INTO activities (
           strava_id, athlete_id, name, distance_m, moving_time_s, elapsed_time_s,
           start_date, start_date_local, activity_type, sport_type, workout_type,
           gear_id, avg_heartrate, max_heartrate, avg_speed_ms, total_elevation_m,
-          has_heartrate, ae_score, map_polyline
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+          has_heartrate, ae_score, map_polyline, temp_c, humidity_pct
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
         ON CONFLICT (strava_id) DO UPDATE SET
           name=EXCLUDED.name, gear_id=EXCLUDED.gear_id,
-          avg_heartrate=EXCLUDED.avg_heartrate, ae_score=EXCLUDED.ae_score
+          avg_heartrate=EXCLUDED.avg_heartrate, ae_score=EXCLUDED.ae_score,
+          temp_c=COALESCE(activities.temp_c, EXCLUDED.temp_c),
+          humidity_pct=COALESCE(activities.humidity_pct, EXCLUDED.humidity_pct)
       `, [
         a.id, athlete.strava_id, a.name,
         a.distance, a.moving_time, a.elapsed_time,
@@ -112,6 +145,7 @@ async function syncActivities(athlete) {
         a.has_heartrate || false,
         ae,
         a.map?.summary_polyline || null,
+        temp_c, humidity_pct,
       ]);
 
       totalNew++;
@@ -127,8 +161,11 @@ async function syncActivities(athlete) {
     [athlete.strava_id]
   );
 
+  // After sync, find any race matches for this athlete
+  const raceMatches = await findRaceMatches(athlete.strava_id);
+
   console.log(`Synced ${totalNew} new activities for ${athlete.strava_id}`);
-  return totalNew;
+  return { newActivities: totalNew, raceMatches };
 }
 
 // ── Gear upsert ───────────────────────────────────────────────────────────────
@@ -192,4 +229,39 @@ async function getStreams(athlete, activityId) {
   };
 }
 
-module.exports = { syncActivities, getStreams, stravaFetch, refreshTokenIfNeeded };
+// ── Race matching ─────────────────────────────────────────────────────────────
+// Find activities that likely correspond to a race in the DB (±7 days, ±10% distance)
+// Returns races the athlete hasn't yet claimed
+async function findRaceMatches(athleteId) {
+  const rows = await query(`
+    SELECT
+      re.id              AS race_event_id,
+      re.event_name,
+      re.event_date,
+      re.distance_m      AS race_distance_m,
+      re.location,
+      a.strava_id        AS activity_id,
+      a.name             AS activity_name,
+      a.start_date_local,
+      a.distance_m       AS activity_distance_m,
+      a.moving_time_s,
+      -- Check athlete hasn't already claimed a result in this race
+      (SELECT COUNT(*) FROM race_finishers rf
+       WHERE rf.race_event_id = re.id AND rf.athlete_id = $1) AS already_claimed
+    FROM race_events re
+    JOIN activities a ON (
+      a.athlete_id = $1
+      -- Date within ±7 days of race
+      AND ABS(EXTRACT(EPOCH FROM (a.start_date_local::date - re.event_date)) / 86400) <= 7
+      -- Distance within ±10%
+      AND re.distance_m > 0
+      AND a.distance_m BETWEEN re.distance_m * 0.90 AND re.distance_m * 1.10
+    )
+    WHERE re.event_date IS NOT NULL
+    ORDER BY re.event_date DESC
+  `, [athleteId]);
+
+  return rows.filter(r => parseInt(r.already_claimed) === 0);
+}
+
+module.exports = { syncActivities, getStreams, stravaFetch, refreshTokenIfNeeded, findRaceMatches };

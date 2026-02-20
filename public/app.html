@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Senén Viz · 0.3</title>
+<title>Senén Viz · App</title>
 <meta name="description" content="Visualize and compare your Strava runs with animated elevation, pace and heart rate charts.">
 <meta name="theme-color" content="#16a34a">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -109,10 +109,15 @@ html { height: -webkit-fill-available; }
 .hint a { color: var(--accent); } .hint code { font-family: var(--mono); font-size: 11px; background: #dcfce7; padding: 1px 4px; border-radius: 3px; }
 .back-link { font-family: var(--mono); font-size: 11px; color: var(--ink-muted); background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; margin-top: 14px; padding: 0; }
 .back-link:hover { color: var(--ink); }
-.dist-tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
-.dtab { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 18px; border-radius: 100px; border: 1.5px solid var(--grid); background: transparent; color: var(--ink-muted); cursor: pointer; transition: all 0.15s; }
-.dtab:hover { border-color: #bbb; color: var(--ink); }
-.dtab.active { background: var(--ink); border-color: var(--ink); color: white; }
+.dist-tabs { display:none; } /* hidden — replaced by dropdown */
+
+/* Date range slider */
+.date-slider-wrap { position:relative; margin:4px 0 0; }
+.date-slider-track { position:relative; height:4px; background:var(--grid); border-radius:2px; margin:10px 4px; }
+.date-slider-fill  { position:absolute; height:100%; background:var(--accent); border-radius:2px; pointer-events:none; }
+.date-slider-thumb { position:absolute; top:50%; width:16px; height:16px; background:white; border:2px solid var(--accent); border-radius:50%; transform:translate(-50%,-50%); cursor:grab; box-shadow:0 1px 4px rgba(0,0,0,.18); transition:box-shadow .1s; z-index:2; }
+.date-slider-thumb:active { cursor:grabbing; box-shadow:0 2px 8px rgba(0,0,0,.28); }
+.date-slider-labels { display:flex; justify-content:space-between; font-family:var(--mono); font-size:10px; color:var(--ink-muted); margin-top:2px; }
 
 /* SCREENS */
 #picker-screen   { display: none; flex-direction: column; width: 100%; max-width: 620px; margin-top: 20px; }
@@ -126,7 +131,8 @@ html { height: -webkit-fill-available; }
 
 /* PICKER */
 .picker-header { margin-bottom: 18px; }
-  .filter-bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px; padding:10px 12px; background:var(--surface); border-radius:12px; border:1px solid var(--grid); }
+  .filter-bar { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; padding:12px 14px; background:var(--surface); border-radius:14px; border:1px solid var(--grid); }
+  .filter-row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   .filter-chip { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.06em; padding:5px 12px; border-radius:100px; border:1.5px solid var(--grid); background:transparent; color:var(--ink-muted); cursor:pointer; transition:all .15s; white-space:nowrap; }
   .filter-chip:hover { border-color:#bbb; color:var(--ink); }
   .filter-chip.active { background:var(--ink); border-color:var(--ink); color:white; }
@@ -134,6 +140,7 @@ html { height: -webkit-fill-available; }
   .filter-sep { width:1px; height:20px; background:var(--grid); flex-shrink:0; }
   .filter-select-sm { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.05em; padding:5px 10px; border-radius:100px; border:1.5px solid var(--grid); background:transparent; color:var(--ink-muted); cursor:pointer; outline:none; appearance:none; -webkit-appearance:none; padding-right:22px; background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 8px center; }
   .filter-select-sm.active { border-color:var(--ink); color:var(--ink); }
+  .filter-select-sm:focus { border-color:var(--accent); color:var(--ink); }
   .filter-count { font-family:var(--mono); font-size:10px; color:var(--ink-muted); margin-left:auto; white-space:nowrap; }
 .picker-header h2 { font-size: 21px; font-weight: 600; letter-spacing: -0.02em; }
 .picker-header p { font-size: 13px; color: var(--ink-muted); margin-top: 4px; }
@@ -321,7 +328,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
     <h2 id="picker-title">Your Runs</h2>
     <p>Select one or more to compare</p>
   </div>
-  <div class="dist-tabs" id="dist-tabs">
+  <!-- hidden dist-tabs kept for JS compat -->
+  <div class="dist-tabs" id="dist-tabs" style="display:none">
     <button class="dtab" data-min="4000"  data-max="6500"  onclick="setDist(this)">5K</button>
     <button class="dtab" data-min="8500"  data-max="12000" onclick="setDist(this)">10K</button>
     <button class="dtab" data-min="14500" data-max="18000" onclick="setDist(this)">10 mi</button>
@@ -329,17 +337,45 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
   </div>
   <!-- Filter bar -->
   <div class="filter-bar" id="filter-bar" style="display:none">
-    <button class="filter-chip active" id="ftype-all"   onclick="setTypeFilter('all')">All</button>
-    <button class="filter-chip"        id="ftype-race"  onclick="setTypeFilter('race')">Race</button>
-    <button class="filter-chip"        id="ftype-workout" onclick="setTypeFilter('workout')">Workout</button>
-    <button class="filter-chip"        id="ftype-run"   onclick="setTypeFilter('run')">Easy Run</button>
-    <div class="filter-sep"></div>
-    <select class="filter-select-sm" id="fshoe" onchange="filterAndRenderList()">
-      <option value="">All Shoes</option>
-    </select>
-    <div class="filter-sep"></div>
-    <button class="filter-chip" id="fmatched" onclick="toggleMatchedFilter()" title="Only show runs that match an imported race">🏅 Matched</button>
-    <span class="filter-count" id="filter-count"></span>
+
+    <!-- Row 1: dropdowns + matched toggle -->
+    <div class="filter-row">
+      <select class="filter-select-sm active" id="fdist" onchange="setDistFromDropdown()">
+        <option value="all">All Distances</option>
+        <option value="5k">5K</option>
+        <option value="10k">10K</option>
+        <option value="10mi">10 Miles</option>
+        <option value="half">Half Marathon</option>
+      </select>
+      <div class="filter-sep"></div>
+      <select class="filter-select-sm" id="ftype" onchange="setTypeFromDropdown()">
+        <option value="all">All Types</option>
+        <option value="race">Race</option>
+        <option value="workout">Workout</option>
+        <option value="run">Easy Run</option>
+      </select>
+      <div class="filter-sep"></div>
+      <select class="filter-select-sm" id="fshoe" onchange="filterAndRenderList()">
+        <option value="">All Shoes</option>
+      </select>
+      <div class="filter-sep"></div>
+      <button class="filter-chip" id="fmatched" onclick="toggleMatchedFilter()" title="Only show runs matched to race DB">🏅 Race DB</button>
+      <span class="filter-count" id="filter-count"></span>
+    </div>
+
+    <!-- Row 2: date range slider -->
+    <div style="padding:0 4px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-family:var(--mono);font-size:10px;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.06em">Date Range</span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--ink)" id="date-range-label"></span>
+      </div>
+      <div class="date-slider-track" id="date-track">
+        <div class="date-slider-fill" id="date-fill"></div>
+        <div class="date-slider-thumb" id="thumb-lo"></div>
+        <div class="date-slider-thumb" id="thumb-hi"></div>
+      </div>
+    </div>
+
   </div>
   <div id="load-acts" class="loading-msg"><div class="spinner"></div>Fetching activities…</div>
   <div class="activity-list" id="act-list"></div>
@@ -511,7 +547,7 @@ const S = {
   accessToken:'', activities:[], selectedIds: new Set(),
   races:[], progress:0, playing:false, speed:8,
   lastTs:null, rafId:null, maxDuration:0,
-  distMin:18000, distMax:24000,
+  distMin:0, distMax:999999,
   distLabels:{'18000':'Half Marathon','14500':'10 Miles','8500':'10K','4000':'5K'},
   gearCache: {}
 };
@@ -527,6 +563,10 @@ function setDist(btn) {
   btn.classList.add('active');
   const label = S.distLabels[btn.dataset.min] || 'Runs';
   document.getElementById('picker-title').textContent = 'Your ' + label + 's';
+  // keep dropdown in sync
+  const distMap = {'4000':'5k','8500':'10k','14500':'10mi','18000':'half'};
+  const sel = document.getElementById('fdist');
+  if (sel) sel.value = distMap[btn.dataset.min] || 'all';
   S.selectedIds.clear();
   document.getElementById('btn-viz').style.display='none';
   filterAndRenderList();
@@ -539,11 +579,23 @@ function setDist(btn) {
 // Filter state
 const F = { type: 'all', shoe: '', matched: false };
 
-function setTypeFilter(type) {
-  F.type = type;
-  ['all','race','workout','run'].forEach(t => {
-    document.getElementById('ftype-'+t)?.classList.toggle('active', t === type);
-  });
+function setDistFromDropdown() {
+  const v = document.getElementById('fdist').value;
+  const map = {
+    all:  [0,      999999],
+    '5k': [4000,   6500],
+    '10k':[8500,   12000],
+    '10mi':[14500, 18000],
+    half: [18000,  24000],
+  };
+  [S.distMin, S.distMax] = map[v] || [0, 999999];
+  const labels = { all:'Runs', '5k':'5Ks', '10k':'10Ks', '10mi':'10 Milers', half:'Half Marathons' };
+  document.getElementById('picker-title').textContent = 'Your ' + (labels[v] || 'Runs');
+  filterAndRenderList();
+}
+
+function setTypeFromDropdown() {
+  F.type = document.getElementById('ftype').value;
   filterAndRenderList();
 }
 
@@ -551,21 +603,73 @@ function toggleMatchedFilter() {
   F.matched = !F.matched;
   const btn = document.getElementById('fmatched');
   btn.classList.toggle('active-green', F.matched);
-  btn.classList.toggle('filter-chip', true);
   filterAndRenderList();
 }
 
 function populateShoeFilterBar() {
   const sel = document.getElementById('fshoe');
   const shoes = [...new Set(S.activities.map(a => a.gear_name).filter(Boolean))].sort();
-  // Keep "All Shoes" option, rebuild the rest
   while (sel.options.length > 1) sel.remove(1);
   shoes.forEach(s => {
     const opt = document.createElement('option');
     opt.value = s; opt.textContent = s;
     sel.appendChild(opt);
   });
-  if (shoes.length > 0) sel.classList.add('active');
+}
+
+// ── Date range slider ────────────────────────────────────────────────────────
+let DS = { minMs: 0, maxMs: 0, loMs: 0, hiMs: 0, dragging: null };
+
+function initDateSlider() {
+  const dates = S.activities.map(a => new Date(a.start_date_local).getTime()).filter(Boolean);
+  if (!dates.length) return;
+  DS.minMs = Math.min(...dates);
+  DS.maxMs = Math.max(...dates);
+  DS.loMs  = DS.minMs;
+  DS.hiMs  = DS.maxMs;
+  updateSliderUI();
+  bindSliderDrag();
+}
+
+function msToLabel(ms) {
+  return new Date(ms).toLocaleDateString('en-US',{month:'short',year:'numeric'});
+}
+
+function updateSliderUI() {
+  const track = document.getElementById('date-track');
+  if (!track) return;
+  const range = DS.maxMs - DS.minMs || 1;
+  const loPct = (DS.loMs - DS.minMs) / range * 100;
+  const hiPct = (DS.hiMs - DS.minMs) / range * 100;
+  document.getElementById('date-fill').style.left  = loPct + '%';
+  document.getElementById('date-fill').style.width = (hiPct - loPct) + '%';
+  document.getElementById('thumb-lo').style.left = loPct + '%';
+  document.getElementById('thumb-hi').style.left = hiPct + '%';
+  document.getElementById('date-range-label').textContent =
+    msToLabel(DS.loMs) + ' – ' + msToLabel(DS.hiMs);
+}
+
+function bindSliderDrag() {
+  ['lo','hi'].forEach(which => {
+    const thumb = document.getElementById('thumb-'+which);
+    thumb.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      DS.dragging = which;
+      thumb.setPointerCapture(e.pointerId);
+    });
+    thumb.addEventListener('pointermove', e => {
+      if (DS.dragging !== which) return;
+      const track = document.getElementById('date-track');
+      const rect  = track.getBoundingClientRect();
+      let pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const ms = DS.minMs + pct * (DS.maxMs - DS.minMs);
+      if (which === 'lo') DS.loMs = Math.min(ms, DS.hiMs - 86400000);
+      else                DS.hiMs = Math.max(ms, DS.loMs + 86400000);
+      updateSliderUI();
+      filterAndRenderList();
+    });
+    thumb.addEventListener('pointerup', () => { DS.dragging = null; });
+  });
 }
 
 function filterAndRenderList() {
@@ -583,7 +687,13 @@ function filterAndRenderList() {
     // Shoe filter
     if (shoeVal && a.gear_name !== shoeVal) return false;
 
-    // Matched filter — only show runs linked to a race in S.raceMatches
+    // Date range filter
+    if (DS.minMs && DS.maxMs) {
+      const t = new Date(a.start_date_local).getTime();
+      if (t < DS.loMs || t > DS.hiMs + 86400000) return false;
+    }
+
+    // Matched filter
     if (F.matched) {
       const matchedIds = new Set((S.raceMatches||[]).map(m => m.activity_id));
       if (!matchedIds.has(a.id)) return false;
@@ -810,6 +920,7 @@ async function fetchActivities() {
     }
     document.getElementById('filter-bar').style.display = 'flex';
     populateShoeFilterBar();
+    initDateSlider();
     filterAndRenderList();
   } catch(e) {
     document.getElementById('load-acts').style.display='none';

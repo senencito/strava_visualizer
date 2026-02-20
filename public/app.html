@@ -1462,23 +1462,23 @@ async function loadRacesScreen() {
       } else if (evMatches.length) {
         // Potential match — show activity + bib entry
         statusBadge = `<span class="race-event-badge badge-match">⚡ Likely match</span>`;
-        const matchRows = evMatches.map(m => {
+        bodyHtml = evMatches.map((m, i) => {
           const actDist = (m.activity_distance_m / 1609.34).toFixed(2);
           const actDate = new Date(m.start_date_local).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+          const sfx = `${ev.id}-${i}`;
           return `
             <div class="race-match-row">
               <div class="race-match-activity">
                 <div class="act-title">↳ ${m.activity_name}</div>
                 <div class="act-sub">${actDate} · ${actDist} mi · ${fmtTime(m.moving_time_s)}</div>
               </div>
-            </div>`;
-        }).join('');
-        bodyHtml = matchRows + `
-            <div class="bib-claim-row" id="claim-row-${ev.id}">
-              <input type="text" placeholder="Enter your bib #" id="bib-${ev.id}" onkeydown="if(event.key==='Enter')claimBib(${ev.id})">
-              <button class="race-match-claim" onclick="claimBib(${ev.id})">Claim Result</button>
             </div>
-            <div id="bib-result-${ev.id}"></div>`;
+            <div class="bib-claim-row" id="claim-row-${sfx}">
+              <input type="text" placeholder="Enter your bib #" id="bib-${sfx}" onkeydown="if(event.key==='Enter')claimBib(${ev.id},'${sfx}')">
+              <button class="race-match-claim" onclick="claimBib(${ev.id},'${sfx}')">Claim Result</button>
+            </div>
+            <div id="bib-result-${sfx}"></div>`;
+        }).join('');
       } else {
         // No match
         statusBadge = `<span class="race-event-badge badge-none">No match found</span>`;
@@ -1509,11 +1509,12 @@ async function loadRacesScreen() {
   }
 }
 
-async function claimBib(raceEventId) {
-  const bib = document.getElementById(`bib-${raceEventId}`)?.value.trim();
+async function claimBib(raceEventId, sfx) {
+  const id = sfx ?? raceEventId;
+  const bib = document.getElementById(`bib-${id}`)?.value.trim();
   if (!bib) { alert('Please enter your bib number'); return; }
 
-  const resultEl = document.getElementById(`bib-result-${raceEventId}`);
+  const resultEl = document.getElementById(`bib-result-${id}`);
   resultEl.innerHTML = '<div style="font-size:12px;color:var(--ink-muted);padding:6px 0">Looking up bib...</div>';
 
   try {

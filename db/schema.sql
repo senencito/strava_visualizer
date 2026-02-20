@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS race_finishers (
   gender_rank     INT,
   age_group_rank  INT,
   chip_time_s     INT,          -- finish time in seconds
-  country_code    VARCHAR(5),
+  country_code    VARCHAR(20),
   athlete_id      BIGINT REFERENCES athletes(strava_id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
@@ -134,3 +134,4 @@ ALTER TABLE activities ADD COLUMN IF NOT EXISTS start_lat    FLOAT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS start_lng    FLOAT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS temp_c       FLOAT;
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS humidity_pct INT;
+ALTER TABLE race_finishers ALTER COLUMN country_code TYPE VARCHAR(20);

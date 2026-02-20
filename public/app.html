@@ -1210,24 +1210,29 @@ async function loadRacesScreen() {
       fetch('/api/races'),
       fetch('/api/race-matches'),
     ]);
-    const events  = await eventsRes.json();
-    const matches = await matchesRes.json();
+    const eventsRaw  = await eventsRes.json();
+    const matchesRaw = await matchesRes.json();
+
+    // Guard against error responses
+    const events  = Array.isArray(eventsRaw)  ? eventsRaw  : [];
+    const matches = Array.isArray(matchesRaw) ? matchesRaw : [];
 
     if (!events.length) {
-      container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ink-muted);font-size:13px">No races in the database yet.</div>';
+      container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ink-muted);font-size:13px">No races in the database yet. Import some races from the admin page first.</div>';
       return;
     }
 
     // Build a lookup of raceEventId → match activity
     const matchByEvent = {};
-    (matches || []).forEach(m => {
+    matches.forEach(m => {
       if (!matchByEvent[m.race_event_id]) matchByEvent[m.race_event_id] = [];
       matchByEvent[m.race_event_id].push(m);
     });
 
     // Also check for already-claimed results for this athlete
     const claimedRes = await fetch('/api/my-race-results');
-    const claimed = claimedRes.ok ? await claimedRes.json() : [];
+    const claimedRaw = claimedRes.ok ? await claimedRes.json() : [];
+    const claimed = Array.isArray(claimedRaw) ? claimedRaw : [];
     const claimedByEvent = {};
     claimed.forEach(c => { claimedByEvent[c.race_event_id] = c; });
 

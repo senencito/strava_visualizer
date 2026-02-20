@@ -9,6 +9,7 @@ const path         = require('path');
 const { pool, query, queryOne, initDB } = require('../db/client');
 const { syncActivities, getStreams, stravaFetch } = require('./strava');
 const { importRace, lookupBib, fmtTime } = require('./sporthive');
+const { importRaceResult, parseRaceResultUrl } = require('./raceresult');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -256,10 +257,16 @@ app.get('/admin', requireAdmin, (req, res) => {
 
 // ── Race import (admin only) ───────────────────────────────────────────────────
 app.post('/api/admin/import-race', requireAdmin, async (req, res) => {
-  const { url, event_name, race_name, race_id, event_date, distance_m, location, replace } = req.body;
+  const { url, event_name, race_name, race_id, event_date, distance_m, location, replace, listname } = req.body;
   if (!url) return res.status(400).json({ error: 'url is required' });
   try {
-    const result = await importRace({ url, eventName: event_name, raceName: race_name, eventDate: event_date, distanceM: distance_m, location, replace, raceId: race_id });
+    // Route to the correct importer based on URL
+    let result;
+    if (url.includes('raceresult.com')) {
+      result = await importRaceResult({ url, eventName: event_name, raceName: race_name, eventDate: event_date, distanceM: distance_m, location, replace, listname });
+    } else {
+      result = await importRace({ url, eventName: event_name, raceName: race_name, eventDate: event_date, distanceM: distance_m, location, replace, raceId: race_id });
+    }
     res.json(result);
   } catch(err) {
     console.error('Import race error:', err);

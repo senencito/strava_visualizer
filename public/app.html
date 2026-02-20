@@ -126,6 +126,15 @@ html { height: -webkit-fill-available; }
 
 /* PICKER */
 .picker-header { margin-bottom: 18px; }
+  .filter-bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px; padding:10px 12px; background:var(--surface); border-radius:12px; border:1px solid var(--grid); }
+  .filter-chip { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.06em; padding:5px 12px; border-radius:100px; border:1.5px solid var(--grid); background:transparent; color:var(--ink-muted); cursor:pointer; transition:all .15s; white-space:nowrap; }
+  .filter-chip:hover { border-color:#bbb; color:var(--ink); }
+  .filter-chip.active { background:var(--ink); border-color:var(--ink); color:white; }
+  .filter-chip.active-green { background:#16a34a; border-color:#16a34a; color:white; }
+  .filter-sep { width:1px; height:20px; background:var(--grid); flex-shrink:0; }
+  .filter-select-sm { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.05em; padding:5px 10px; border-radius:100px; border:1.5px solid var(--grid); background:transparent; color:var(--ink-muted); cursor:pointer; outline:none; appearance:none; -webkit-appearance:none; padding-right:22px; background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 8px center; }
+  .filter-select-sm.active { border-color:var(--ink); color:var(--ink); }
+  .filter-count { font-family:var(--mono); font-size:10px; color:var(--ink-muted); margin-left:auto; white-space:nowrap; }
 .picker-header h2 { font-size: 21px; font-weight: 600; letter-spacing: -0.02em; }
 .picker-header p { font-size: 13px; color: var(--ink-muted); margin-top: 4px; }
 .activity-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
@@ -318,6 +327,20 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
     <button class="dtab" data-min="14500" data-max="18000" onclick="setDist(this)">10 mi</button>
     <button class="dtab active" data-min="18000" data-max="24000" onclick="setDist(this)">Half Marathon</button>
   </div>
+  <!-- Filter bar -->
+  <div class="filter-bar" id="filter-bar" style="display:none">
+    <button class="filter-chip active" id="ftype-all"   onclick="setTypeFilter('all')">All</button>
+    <button class="filter-chip"        id="ftype-race"  onclick="setTypeFilter('race')">Race</button>
+    <button class="filter-chip"        id="ftype-workout" onclick="setTypeFilter('workout')">Workout</button>
+    <button class="filter-chip"        id="ftype-run"   onclick="setTypeFilter('run')">Easy Run</button>
+    <div class="filter-sep"></div>
+    <select class="filter-select-sm" id="fshoe" onchange="filterAndRenderList()">
+      <option value="">All Shoes</option>
+    </select>
+    <div class="filter-sep"></div>
+    <button class="filter-chip" id="fmatched" onclick="toggleMatchedFilter()" title="Only show runs that match an imported race">🏅 Matched</button>
+    <span class="filter-count" id="filter-count"></span>
+  </div>
   <div id="load-acts" class="loading-msg"><div class="spinner"></div>Fetching activities…</div>
   <div class="activity-list" id="act-list"></div>
   <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -508,15 +531,71 @@ function setDist(btn) {
   document.getElementById('btn-viz').style.display='none';
   filterAndRenderList();
   // Check for race matches on load too
-  fetch('/api/race-matches').then(r=>r.json()).then(m=>{ if(m?.length) showRaceMatches(m); }).catch(()=>{});
+  fetch('/api/race-matches').then(r=>r.json()).then(m=>{
+    S.raceMatches = Array.isArray(m) ? m : [];
+    if(S.raceMatches.length) showRaceMatches(S.raceMatches);
+  }).catch(()=>{});
 }
-function filterAndRenderList() {
-  const filtered = S.activities.filter(a => {
-    const isRun=['Run','VirtualRun','TrailRun'].includes(a.type)||(a.sport_type||'').toLowerCase().includes('run');
-    return isRun && a.distance >= S.distMin && a.distance <= S.distMax;
+// Filter state
+const F = { type: 'all', shoe: '', matched: false };
+
+function setTypeFilter(type) {
+  F.type = type;
+  ['all','race','workout','run'].forEach(t => {
+    document.getElementById('ftype-'+t)?.classList.toggle('active', t === type);
   });
-  if(!filtered.length){
-    document.getElementById('act-list').innerHTML=`<p style="color:var(--ink-muted);font-size:13px;padding:10px 0">No runs found for this distance in your history.</p>`;
+  filterAndRenderList();
+}
+
+function toggleMatchedFilter() {
+  F.matched = !F.matched;
+  const btn = document.getElementById('fmatched');
+  btn.classList.toggle('active-green', F.matched);
+  btn.classList.toggle('filter-chip', true);
+  filterAndRenderList();
+}
+
+function populateShoeFilterBar() {
+  const sel = document.getElementById('fshoe');
+  const shoes = [...new Set(S.activities.map(a => a.gear_name).filter(Boolean))].sort();
+  // Keep "All Shoes" option, rebuild the rest
+  while (sel.options.length > 1) sel.remove(1);
+  shoes.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s; opt.textContent = s;
+    sel.appendChild(opt);
+  });
+  if (shoes.length > 0) sel.classList.add('active');
+}
+
+function filterAndRenderList() {
+  const shoeVal = document.getElementById('fshoe')?.value || '';
+  const filtered = S.activities.filter(a => {
+    const isRun = ['Run','VirtualRun','TrailRun'].includes(a.type) || (a.sport_type||'').toLowerCase().includes('run');
+    if (!isRun) return false;
+    if (a.distance < S.distMin || a.distance > S.distMax) return false;
+
+    // Type filter
+    if (F.type === 'race')    { if (a.workout_type !== 1) return false; }
+    if (F.type === 'workout') { if (![2,3,4,5,6,7,8,9,10,11,12].includes(a.workout_type)) return false; }
+    if (F.type === 'run')     { if (a.workout_type && a.workout_type !== 0) return false; }
+
+    // Shoe filter
+    if (shoeVal && a.gear_name !== shoeVal) return false;
+
+    // Matched filter — only show runs linked to a race in S.raceMatches
+    if (F.matched) {
+      const matchedIds = new Set((S.raceMatches||[]).map(m => m.activity_id));
+      if (!matchedIds.has(a.id)) return false;
+    }
+
+    return true;
+  });
+
+  document.getElementById('filter-count').textContent = `${filtered.length} run${filtered.length!==1?'s':''}`;
+
+  if (!filtered.length) {
+    document.getElementById('act-list').innerHTML=`<p style="color:var(--ink-muted);font-size:13px;padding:10px 0">No runs match the current filters.</p>`;
     document.getElementById('btn-trend').style.display='none';
   } else {
     renderList(filtered);
@@ -729,6 +808,8 @@ async function fetchActivities() {
       document.getElementById('act-list').innerHTML=`<p style="color:var(--ink-muted);font-size:13px;padding:10px 0">No runs yet. Click ↻ Sync to load from Strava.</p>`;
       return;
     }
+    document.getElementById('filter-bar').style.display = 'flex';
+    populateShoeFilterBar();
     filterAndRenderList();
   } catch(e) {
     document.getElementById('load-acts').style.display='none';

@@ -7,7 +7,7 @@ const pgSession    = require('connect-pg-simple')(session);
 const fetch        = require('node-fetch');
 const path         = require('path');
 const { pool, query, queryOne, initDB } = require('../db/client');
-const { syncActivities, getStreams, stravaFetch } = require('./strava');
+const { syncActivities, getStreams, stravaFetch, findRaceMatches } = require('./strava');
 const { importRace, lookupBib, fmtTime } = require('./sporthive');
 const { importRaceResult, parseRaceResultUrl } = require('./raceresult');
 
@@ -83,7 +83,7 @@ app.get('/auth/strava', (req, res) => {
     redirect_uri:  process.env.STRAVA_REDIRECT_URI,
     response_type: 'code',
     approval_prompt: 'auto',
-    scope: 'read,activity:read_all',
+    scope: 'read,activity:read_all,profile:read_all',
   });
   res.redirect(`https://www.strava.com/oauth/authorize?${params}`);
 });
@@ -113,12 +113,24 @@ app.get('/auth/callback', async (req, res) => {
     const data = await tokenRes.json();
     const a    = data.athlete;
 
+    // Fetch full athlete profile to get email (requires profile:read_all scope)
+    let email = null;
+    try {
+      const profileRes = await fetch(`${process.env.STRAVA_BASE || 'https://www.strava.com/api/v3'}/athlete`, {
+        headers: { Authorization: `Bearer ${data.access_token}` },
+      });
+      if (profileRes.ok) {
+        const profile = await profileRes.json();
+        email = profile.email || null;
+      }
+    } catch(e) { console.warn('Could not fetch athlete email:', e.message); }
+
     // Upsert athlete in DB
     await query(`
       INSERT INTO athletes (
         strava_id, username, firstname, lastname, profile_pic,
-        city, country, access_token, refresh_token, token_expires_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        city, country, email, access_token, refresh_token, token_expires_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       ON CONFLICT (strava_id) DO UPDATE SET
         access_token     = EXCLUDED.access_token,
         refresh_token    = EXCLUDED.refresh_token,
@@ -126,10 +138,11 @@ app.get('/auth/callback', async (req, res) => {
         firstname        = EXCLUDED.firstname,
         lastname         = EXCLUDED.lastname,
         profile_pic      = EXCLUDED.profile_pic,
+        email            = COALESCE(EXCLUDED.email, athletes.email),
         updated_at       = NOW()
     `, [
       a.id, a.username, a.firstname, a.lastname, a.profile_medium,
-      a.city, a.country,
+      a.city, a.country, email,
       data.access_token, data.refresh_token, data.expires_at,
     ]);
 
@@ -191,8 +204,8 @@ app.get('/api/me', requireAuth, async (req, res) => {
 app.post('/api/sync', requireAuth, async (req, res) => {
   try {
     const athlete = await getAthlete(req);
-    const newCount = await syncActivities(athlete);
-    res.json({ ok: true, new_activities: newCount });
+    const { newActivities, raceMatches } = await syncActivities(athlete);
+    res.json({ ok: true, new_activities: newActivities, race_matches: raceMatches });
   } catch (err) {
     console.error('Sync error:', err);
     res.status(500).json({ error: err.message });
@@ -344,6 +357,27 @@ app.post('/api/races/:id/claim', requireAuth, async (req, res) => {
   // Return full result with percentiles
   const result = await lookupBib(req.params.id, bib);
   res.json(result);
+});
+
+// ── Race matches for current athlete ─────────────────────────────────────────
+app.get('/api/race-matches', requireAuth, async (req, res) => {
+  try {
+    const matches = await findRaceMatches(req.session.athleteId);
+    res.json(matches);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Athlete profile (includes email) ──────────────────────────────────────────
+app.get('/api/me', requireAuth, async (req, res) => {
+  const athlete = await queryOne(
+    `SELECT strava_id, firstname, lastname, username, profile_pic,
+            city, country, email, sex, birthdate, last_sync_at
+     FROM athletes WHERE strava_id=$1`,
+    [req.session.athleteId]
+  );
+  res.json(athlete);
 });
 
 // ── Health check ──────────────────────────────────────────────────────────────

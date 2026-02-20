@@ -254,7 +254,7 @@ async function findRaceMatches(athleteId) {
     JOIN activities a ON (
       a.athlete_id = $1
       -- Date within ±7 days of race
-      AND ABS(EXTRACT(EPOCH FROM (a.start_date_local::date - re.event_date)) / 86400) <= 7
+      AND ABS(a.start_date_local::date - re.event_date) <= 2
       -- Distance within ±10%
       AND re.distance_m > 0
       AND a.distance_m BETWEEN re.distance_m * 0.90 AND re.distance_m * 1.10

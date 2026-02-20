@@ -116,7 +116,7 @@ async function syncActivities(athlete) {
         ? parseFloat((a.average_speed / a.average_heartrate * 1000).toFixed(4))
         : null;
 
-      // Fetch weather for this activity (start lat/lon from Strava summary)
+      // Save and use start lat/lon
       const lat = a.start_latlng?.[0] || null;
       const lon = a.start_latlng?.[1] || null;
       const { temp_c, humidity_pct } = await fetchWeather(lat, lon, a.start_date);
@@ -127,11 +127,13 @@ async function syncActivities(athlete) {
           strava_id, athlete_id, name, distance_m, moving_time_s, elapsed_time_s,
           start_date, start_date_local, activity_type, sport_type, workout_type,
           gear_id, avg_heartrate, max_heartrate, avg_speed_ms, total_elevation_m,
-          has_heartrate, ae_score, map_polyline, temp_c, humidity_pct
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+          has_heartrate, ae_score, map_polyline, start_lat, start_lng, temp_c, humidity_pct
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
         ON CONFLICT (strava_id) DO UPDATE SET
           name=EXCLUDED.name, gear_id=EXCLUDED.gear_id,
           avg_heartrate=EXCLUDED.avg_heartrate, ae_score=EXCLUDED.ae_score,
+          start_lat=COALESCE(activities.start_lat, EXCLUDED.start_lat),
+          start_lng=COALESCE(activities.start_lng, EXCLUDED.start_lng),
           temp_c=COALESCE(activities.temp_c, EXCLUDED.temp_c),
           humidity_pct=COALESCE(activities.humidity_pct, EXCLUDED.humidity_pct)
       `, [
@@ -145,7 +147,7 @@ async function syncActivities(athlete) {
         a.has_heartrate || false,
         ae,
         a.map?.summary_polyline || null,
-        temp_c, humidity_pct,
+        lat, lon, temp_c, humidity_pct,
       ]);
 
       totalNew++;

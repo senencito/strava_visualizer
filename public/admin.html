@@ -102,6 +102,15 @@
       <div class="field-hint">Paste any URL from results.sporthive.com — the event and race IDs are extracted automatically</div>
     </div>
 
+    <!-- RaceResult listname — shown for raceresult.com URLs -->
+    <div id="rr-listname-field" style="display:none;margin-bottom:16px">
+      <div class="field">
+        <label>List Name <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional — auto-detected)</span></label>
+        <input type="text" id="f-listname" placeholder="e.g. Online|Final">
+        <div class="field-hint">Only needed if auto-detection fails. Check Network tab → RRPublish request → listname param.</div>
+      </div>
+    </div>
+
     <!-- Race picker — shown when URL has no race ID -->
     <div id="race-picker" style="display:none;margin-bottom:16px">
       <div class="field">
@@ -214,6 +223,16 @@ let selectedRaceId = null;
 document.getElementById('f-url').addEventListener('blur', async () => {
   const url = document.getElementById('f-url').value.trim();
   if (!url) return;
+
+  // RaceResult URL — show listname field, hide Sporthive picker
+  if (url.includes('raceresult.com')) {
+    document.getElementById('rr-listname-field').style.display = 'block';
+    hidePicker();
+    return;
+  } else {
+    document.getElementById('rr-listname-field').style.display = 'none';
+  }
+
   // Only look up races if URL has no /races/ segment
   if (url.includes('/races/')) { selectedRaceId = null; hidePicker(); return; }
 
@@ -284,6 +303,7 @@ async function importRace() {
       body: JSON.stringify({
         url, event_name: name, race_name: raceName || null,
         race_id: selectedRaceId || null,
+        listname: document.getElementById('f-listname').value.trim() || null,
         event_date: date || null,
         distance_m: dist ? parseFloat(dist) : null,
         location: location || null,

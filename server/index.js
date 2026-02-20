@@ -230,7 +230,10 @@ app.get('/api/activities', requireAuth, async (req, res) => {
       a.total_elevation_m,
       a.gear_id,
       g.name        AS gear_name,
-      g.brand_name  AS gear_brand
+      g.brand_name  AS gear_brand,
+      a.temp_c,
+      a.humidity_pct,
+      a.sport_type
     FROM activities a
     LEFT JOIN gear g ON g.strava_id = a.gear_id
     WHERE a.athlete_id = $1

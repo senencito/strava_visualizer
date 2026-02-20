@@ -416,6 +416,39 @@ app.post('/api/admin/backfill-weather', requireAdmin, async (req, res) => {
   res.end();
 });
 
+// ── Athlete's claimed race results ────────────────────────────────────────────
+app.get('/api/my-race-results', requireAuth, async (req, res) => {
+  try {
+    const rows = await query(`
+      SELECT
+        rf.id, rf.race_event_id, rf.bib, rf.name,
+        rf.overall_rank, rf.gender_rank, rf.age_group_rank,
+        rf.chip_time_s, rf.age_group,
+        re.event_name, re.event_date, re.distance_m, re.total_finishers, re.location,
+        -- Compute percentiles inline
+        CASE WHEN rf.overall_rank > 0 AND re.total_finishers > 0
+          THEN ROUND((1.0 - rf.overall_rank::float / re.total_finishers) * 100)
+          ELSE NULL END AS overall_pct,
+        (SELECT COUNT(*) FROM race_finishers rf2
+         WHERE rf2.race_event_id = rf.race_event_id
+         AND rf2.age_group = rf.age_group) AS age_group_total,
+        CASE WHEN rf.age_group_rank > 0
+          THEN ROUND((1.0 - rf.age_group_rank::float /
+            NULLIF((SELECT COUNT(*) FROM race_finishers rf2
+             WHERE rf2.race_event_id = rf.race_event_id
+             AND rf2.age_group = rf.age_group), 0)) * 100)
+          ELSE NULL END AS age_group_pct
+      FROM race_finishers rf
+      JOIN race_events re ON re.id = rf.race_event_id
+      WHERE rf.athlete_id = $1
+      ORDER BY re.event_date DESC NULLS LAST
+    `, [req.session.athleteId]);
+    res.json(rows);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Athlete profile (includes email) ──────────────────────────────────────────
 app.get('/api/me', requireAuth, async (req, res) => {
   const athlete = await queryOne(

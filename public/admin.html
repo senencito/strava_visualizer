@@ -167,6 +167,17 @@
     <div class="log" id="import-log"></div>
   </div>
 
+  <!-- Tools -->
+  <div class="card">
+    <div class="card-title">Tools</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-outline btn-sm" onclick="backfillWeather()">⛅ Backfill Weather Data</button>
+      <a class="btn btn-outline btn-sm" href="/api/race-matches/debug" target="_blank" style="text-decoration:none">🔍 Debug Race Matches</a>
+      <span id="backfill-status" style="font-family:var(--mono);font-size:11px;color:var(--ink-muted)"></span>
+    </div>
+    <pre id="backfill-log" style="display:none;margin-top:14px;background:#111;color:#22c55e;font-family:var(--mono);font-size:11px;border-radius:10px;padding:14px;max-height:200px;overflow-y:auto;white-space:pre-wrap"></pre>
+  </div>
+
   <!-- Imported Races -->
   <div class="card">
     <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
@@ -355,6 +366,37 @@ async function importRace() {
     btn.disabled = false;
     btn.textContent = '↓ Import All Finishers';
   }
+}
+
+// ── Backfill weather ──────────────────────────────────────────────────────────
+async function backfillWeather() {
+  const btn = event.target;
+  const log = document.getElementById('backfill-log');
+  const status = document.getElementById('backfill-status');
+  btn.disabled = true;
+  log.style.display = 'block';
+  log.textContent = '';
+  status.textContent = 'Running...';
+
+  try {
+    const res = await fetch('/api/admin/backfill-weather', {
+      method: 'POST',
+      headers: authHeaders,
+    });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      log.textContent += decoder.decode(value);
+      log.scrollTop = log.scrollHeight;
+    }
+    status.textContent = '✓ Done';
+  } catch(e) {
+    log.textContent += `\nError: ${e.message}`;
+    status.textContent = '❌ Error';
+  }
+  btn.disabled = false;
 }
 
 // ── Load races table ──────────────────────────────────────────────────────────

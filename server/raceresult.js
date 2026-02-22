@@ -100,18 +100,22 @@ async function fetchPage(eventId, listname, groupFilters, numResults, page, keyI
 }
 
 // ── Discover the list name and structure ──────────────────────────────────────
-async function discoverEvent(eventId, key) {
-  const candidates = ['Online|Final', 'Results|All', 'Online|Results', 'Results|Final', 'Online|All'];
+// Tries list names from the config first, then falls back to hardcoded candidates
+async function discoverEvent(eventId, keyInfo) {
+  const fromConfig = keyInfo.lists || [];
+  const fallbacks  = ['Online|Final', 'Results|All', 'Online|Results', 'Results|Final', 'Online|All'];
+  const seen = new Set();
+  const candidates = [...fromConfig, ...fallbacks].filter(c => seen.has(c) ? false : seen.add(c));
 
   for (const listname of candidates) {
     try {
-      const data = await fetchPage(eventId, listname, {}, 5, 1, key);
+      const data = await fetchPage(eventId, listname, {}, 5, 1, keyInfo);
       if (data.data && Object.keys(data.data).length > 0) {
         return {
           listname,
           dataFields: data.DataFields || [],
           groupFilters: data.groupFilters || [],
-          key,
+          key: keyInfo,
         };
       }
     } catch(e) { console.log(`  Tried ${listname}: ${e.message}`); }
@@ -125,7 +129,8 @@ async function discoverEvent(eventId, key) {
 function extractFinishers(data, dataFields) {
   const finishers = [];
   const bibIdx       = dataFields.indexOf('BIB');
-  const nameIdx      = dataFields.indexOf('LASTNAME');
+  const firstNameIdx = dataFields.indexOf('FIRSTNAME');
+  const lastNameIdx  = dataFields.indexOf('LASTNAME');
   const ageGroupIdx  = dataFields.indexOf('AGEGROUP.NAME');
   const finishIdx    = dataFields.findIndex(f => f.includes('Finish') || f.includes('FINISH'));
   const rankIdx      = dataFields.findIndex(f => f.includes('AUTORANK') || f.includes('Rank') || f.includes('rank'));
@@ -136,29 +141,29 @@ function extractFinishers(data, dataFields) {
 
     for (const [subKey, rows] of Object.entries(subGroups)) {
       const subGroupName = subKey.replace(/^#\d+_/, '');
-      // Skip non-overall subgroups to avoid duplicate counting
-      // We use the gender subgroups (Female/Male) as they have names
-      // The unnamed "#1_" group appears to be bib-only without names — skip it
+      // Skip the unnamed group (bib-only / DNS entries) — only named gender/category groups have full data
       if (!subGroupName || subGroupName === '') continue;
 
       for (const row of rows) {
-        // Last row is [totalCount] — skip single-element rows
+        // Last element of each sub-group is [totalCount] — skip single-element rows
         if (!Array.isArray(row) || row.length === 1) continue;
 
-        const bib      = bibIdx >= 0  ? String(row[bibIdx] || '').trim() : null;
-        const name     = nameIdx >= 0 ? String(row[nameIdx] || '').trim() : null;
-        const ageGroup = ageGroupIdx >= 0 ? String(row[ageGroupIdx] || '').trim() : null;
-        const chipTime = finishIdx >= 0 ? parseTimeToSeconds(row[finishIdx]) : null;
-        const rankRaw  = rankIdx >= 0 ? String(row[rankIdx] || '') : null;
-        const rank     = rankRaw ? parseInt(rankRaw.replace(/\D/g, '')) || null : null;
+        const bib       = bibIdx >= 0       ? String(row[bibIdx] || '').trim()       : null;
+        const firstName = firstNameIdx >= 0 ? String(row[firstNameIdx] || '').trim() : '';
+        const lastName  = lastNameIdx >= 0  ? String(row[lastNameIdx] || '').trim()  : '';
+        const name      = [firstName, lastName].filter(Boolean).join(' ') || null;
+        const ageGroup  = ageGroupIdx >= 0  ? String(row[ageGroupIdx] || '').trim()  : null;
+        const chipTime  = finishIdx >= 0    ? parseTimeToSeconds(row[finishIdx])      : null;
+        const rankRaw   = rankIdx >= 0      ? String(row[rankIdx] || '')              : null;
+        const rank      = rankRaw ? parseInt(rankRaw.replace(/\D/g, '')) || null : null;
 
-        // Infer gender from subgroup name
+        // Infer gender from sub-group name ("Female", "Male", etc.)
         const genderStr = subGroupName.toLowerCase();
-        const gender = genderStr.includes('female') || genderStr.includes('f') ? 2
-                     : genderStr.includes('male')   || genderStr.includes('m') ? 1
+        const gender = genderStr === 'female' || genderStr.startsWith('female') ? 2
+                     : genderStr === 'male'   || genderStr.startsWith('male')   ? 1
                      : null;
 
-        if (!name) continue; // skip bib-only rows
+        if (!name) continue; // skip rows without a name (N.N. / unknown)
 
         finishers.push({ bib, name, ageGroup, chipTime, rank, gender, contest: contestName });
       }
@@ -235,10 +240,9 @@ async function importRaceResult({ url, eventName, raceName, eventDate, distanceM
     };
   }
 
-  // Get session key + actual host first
-  console.log(`Getting RaceResult session key for event ${eventId}...`);
-  const keyInfo = await getEventKey(eventId);
-  console.log(`  Key: ${keyInfo.key}, Host: ${keyInfo.host}`);
+  // Get key + list names from the config endpoint
+  console.log(`Fetching RaceResult config for event ${eventId}...`);
+  const keyInfo = await getConfig(eventId);
 
   // Discover list structure
   console.log(`Discovering list for event ${eventId}...`);

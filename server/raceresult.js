@@ -4,37 +4,26 @@ const { query, queryOne } = require('../db/client');
 
 const RATE_LIMIT_MS = 300;
 
-// ── Get session key + actual subdomain from the event page ───────────────────
-// The key is a hex string embedded in the page HTML, and the API may be on my2/my3/etc
-async function getEventKey(eventId) {
-  // Fetch the canonical page — my.raceresult.com redirects to myN.raceresult.com
-  const pageUrl = `https://my.raceresult.com/${eventId}/`;
-  const res = await fetch(pageUrl, {
+// ── Fetch event config (key + list names) from the RRPublish config endpoint ──
+// The key is NOT embedded in the page HTML — it lives at /RRPublish/data/config
+async function getConfig(eventId) {
+  const configUrl = `https://my.raceresult.com/${eventId}/RRPublish/data/config`;
+  const res = await fetch(configUrl, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Accept': 'text/html',
+      'Accept': 'application/json',
     },
     timeout: 15000,
     redirect: 'follow',
   });
-  const html = await res.text();
-  // Capture the actual host we landed on (e.g. my3.raceresult.com)
+  if (!res.ok) throw new Error(`RaceResult config fetch failed for ${eventId}: ${res.status}`);
+  const data = await res.json();
+  if (!data.key) throw new Error(`No key found in RaceResult config for event ${eventId}`);
+
   const finalHost = new URL(res.url).host;
-
-  // Extract hex key — pattern: key":"94cf5045a053c3be3c3a675b7bdca3cf"
-  const hexKeyPat = /["']key["']\s*:\s*["']([0-9a-f]{20,})["']/i;
-  const hexKeyPat2 = /[?&]key=([0-9a-f]{20,})/i;
-  const hexKeyPat3 = /RRPublish[^"']*["']([0-9a-f]{20,})["']/i;
-
-  for (const pat of [hexKeyPat, hexKeyPat2, hexKeyPat3]) {
-    const m = html.match(pat);
-    if (m) {
-      console.log(`  Key: ${m[1]}, Host: ${finalHost}`);
-      return { key: m[1], host: finalHost };
-    }
-  }
-
-  throw new Error('Could not extract RaceResult key from page HTML');
+  const lists = (data.lists || []).map(l => l.Name).filter(Boolean);
+  console.log(`  Key: ${data.key}, Host: ${finalHost}, Lists: ${lists.join(', ')}`);
+  return { key: data.key, host: finalHost, lists };
 }
 
 // ── Parse event ID from any my.raceresult.com URL ─────────────────────────────

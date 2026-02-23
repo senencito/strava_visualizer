@@ -1644,12 +1644,11 @@ function renderAnalytics() {
   // ── Threshold Pace (avg pace when HR > 88% of estimated max HR) ─────────────
   function thresholdPace(bucket) {
     const paces = [];
+    const allHRs = acts.map(x=>x.average_heartrate).filter(Boolean);
+    const estMaxHR = allHRs.length ? Math.max(...allHRs) * 1.08 : 190;
     bucket.forEach(a => {
-      if (!a.avg_heartrate || !a.average_speed) return;
-      // Estimate max HR as highest avg HR seen + 10% buffer
-      const allHRs = acts.map(x=>x.avg_heartrate).filter(Boolean);
-      const estMaxHR = allHRs.length ? Math.max(...allHRs) * 1.08 : 190;
-      if (a.avg_heartrate >= estMaxHR * 0.88) {
+      if (!a.average_heartrate || !a.average_speed) return;
+      if (a.average_heartrate >= estMaxHR * 0.88) {
         paces.push(a.average_speed);
       }
     });

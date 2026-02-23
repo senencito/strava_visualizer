@@ -240,7 +240,7 @@ app.get('/api/activities', requireAuth, async (req, res) => {
       AND a.distance_m >= $2
       AND a.distance_m <= $3
     ORDER BY a.start_date_local DESC
-    LIMIT 200
+    LIMIT 600
   `, [req.session.athleteId, dist_min, dist_max]);
   res.json(rows);
 });

@@ -80,6 +80,10 @@
 .stat-bar-track { flex: 1; height: 6px; background: var(--grid); border-radius: 3px; overflow: hidden; }
 .stat-bar-fill { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.6s ease; }
 .stat-bar-val { width: 52px; text-align: right; color: var(--ink); font-size: 10px; }
+.stat-bar-shoe-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-family: var(--mono); }
+.stat-bar-shoe-col { display: flex; flex-direction: column; width: 150px; min-width: 150px; }
+.stat-bar-shoe-name { font-size: 11px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-bar-shoe-meta { font-size: 9px; color: var(--ink-muted); margin-top: 2px; }
 .analytics-shoe-note { font-family: var(--mono); font-size: 10px; color: var(--ink-muted); margin-top: 4px; }
 .no-data-msg { color: var(--ink-muted); font-size: 13px; padding: 8px 0; font-family: var(--mono); }
 body { background: var(--bg); color: var(--ink); font-family: var(--sans); min-height: 100vh; min-height: -webkit-fill-available; display: flex; flex-direction: column; align-items: center; padding: 40px 24px 80px; padding-top: max(40px, env(safe-area-inset-top)); padding-bottom: max(80px, env(safe-area-inset-bottom)); padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
@@ -1575,19 +1579,21 @@ function filterActivitiesForAnalytics() {
 
 function bucketByPeriod(acts) {
   const now = new Date();
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const threeMonthsAgo = new Date(now); threeMonthsAgo.setMonth(now.getMonth() - 3);
-  const oneYearAgo     = new Date(now); oneYearAgo.setFullYear(now.getFullYear() - 1);
+  // Current period: rolling last 30 days
+  const thirtyDaysAgo  = new Date(now); thirtyDaysAgo.setDate(now.getDate() - 30);
+  // Reference periods both end at the start of the current window
+  const threeMonthsAgo = new Date(thirtyDaysAgo); threeMonthsAgo.setMonth(thirtyDaysAgo.getMonth() - 3);
+  const oneYearAgo     = new Date(thirtyDaysAgo); oneYearAgo.setFullYear(thirtyDaysAgo.getFullYear() - 1);
 
   return {
-    thisMonth:    acts.filter(a => new Date(a.start_date_local) >= thisMonthStart),
-    last3Months:  acts.filter(a => {
+    thisMonth:   acts.filter(a => new Date(a.start_date_local) >= thirtyDaysAgo),
+    last3Months: acts.filter(a => {
       const d = new Date(a.start_date_local);
-      return d >= threeMonthsAgo && d < thisMonthStart;
+      return d >= threeMonthsAgo && d < thirtyDaysAgo;
     }),
-    lastYear:     acts.filter(a => {
+    lastYear:    acts.filter(a => {
       const d = new Date(a.start_date_local);
-      return d >= oneYearAgo && d < thisMonthStart;
+      return d >= oneYearAgo && d < thirtyDaysAgo;
     }),
   };
 }
@@ -1598,6 +1604,13 @@ function avg(arr) {
 }
 
 function fmtAE(v)    { return v ? parseFloat(v).toFixed(2) : '—'; }
+function fmtDateRange(d1, d2) {
+  const MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmt = d => `${MO[d.getMonth()]} ${d.getFullYear()}`;
+  return (d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth())
+    ? fmt(d1)
+    : `${fmt(d1)} – ${fmt(d2)}`;
+}
 function fmtSpeed(v) { return v ? (v * 2.23694).toFixed(2) : '—'; } // m/s → mph
 function fmtPaceFromMs(ms) {
   // ms = m/s, convert to min/mi
@@ -1636,7 +1649,7 @@ function renderAnalytics() {
   const aeYear   = avg(lastYear.map(a    => a.average_speed && a.average_heartrate ? a.average_speed/a.average_heartrate*1000 : null));
 
   document.getElementById('ac-ae-main').innerHTML =
-    aeThis != null ? `${fmtAE(aeThis)}<span>AE score</span>` : '<span style="font-size:16px">No data this month</span>';
+    aeThis != null ? `${fmtAE(aeThis)}<span>AE score</span>` : '<span style="font-size:16px">No data (last 30 days)</span>';
   document.getElementById('ac-ae-comps').innerHTML =
     compRow('vs 3-month avg', aeThis, ae3mo, fmtAE) +
     compRow('vs 12-month avg', aeThis, aeYear, fmtAE);
@@ -1659,7 +1672,7 @@ function renderAnalytics() {
   const tpYear = thresholdPace(lastYear);
 
   document.getElementById('ac-thresh-main').innerHTML =
-    tpThis != null ? `${fmtPaceFromMs(tpThis)}<span>/mi</span>` : '<span style="font-size:16px">No data this month</span>';
+    tpThis != null ? `${fmtPaceFromMs(tpThis)}<span>/mi</span>` : '<span style="font-size:16px">No data (last 30 days)</span>';
   document.getElementById('ac-thresh-comps').innerHTML =
     compRow('vs 3-month avg', tpThis, tp3mo, fmtPaceFromMs, true) +
     compRow('vs 12-month avg', tpThis, tpYear, fmtPaceFromMs, true);
@@ -1670,7 +1683,7 @@ function renderAnalytics() {
   const spYear  = avg(lastYear.map(a    => a.average_speed));
 
   document.getElementById('ac-speed-main').innerHTML =
-    spThis != null ? `${fmtSpeed(spThis)}<span>mph</span>` : '<span style="font-size:16px">No data this month</span>';
+    spThis != null ? `${fmtSpeed(spThis)}<span>mph</span>` : '<span style="font-size:16px">No data (last 30 days)</span>';
   document.getElementById('ac-speed-comps').innerHTML =
     compRow('vs 3-month avg', spThis, sp3mo, fmtSpeed) +
     compRow('vs 12-month avg', spThis, spYear, fmtSpeed);
@@ -1683,21 +1696,37 @@ function renderAnalytics() {
   if (shoeId === 'all') {
     const byShoe = new Map();
     acts.forEach(a => {
-      if (!a.gear_name || !a.average_speed || !a.average_heartrate) return;
+      if (!a.gear_name) return;
       const key = a.gear_name;
-      if (!byShoe.has(key)) byShoe.set(key, []);
-      byShoe.get(key).push(a.average_speed / a.average_heartrate * 1000);
+      if (!byShoe.has(key)) byShoe.set(key, { aes: [], count: 0, dates: [] });
+      const entry = byShoe.get(key);
+      entry.count++;
+      if (a.start_date_local) entry.dates.push(new Date(a.start_date_local));
+      if (a.average_speed && a.average_heartrate)
+        entry.aes.push(a.average_speed / a.average_heartrate * 1000);
     });
     if (byShoe.size > 1) {
       shoesCard.style.display = 'block';
       const scored = [...byShoe.entries()]
-        .map(([name, vals]) => ({ name, ae: avg(vals) }))
+        .map(([name, data]) => {
+          const sortedDates = data.dates.sort((a,b) => a-b);
+          return {
+            name,
+            ae:        avg(data.aes),
+            count:     data.count,
+            firstDate: sortedDates[0],
+            lastDate:  sortedDates[sortedDates.length - 1],
+          };
+        })
         .filter(x => x.ae)
         .sort((a,b) => b.ae - a.ae);
       const maxAE = scored[0]?.ae || 1;
       shoesBars.innerHTML = scored.map((s,i) => `
-        <div class="stat-bar-row">
-          <div class="stat-bar-lbl" title="${s.name}">${i===0?'🏆 ':''}${s.name.length>12?s.name.slice(0,11)+'…':s.name}</div>
+        <div class="stat-bar-shoe-row">
+          <div class="stat-bar-shoe-col">
+            <div class="stat-bar-shoe-name" title="${s.name}">${i===0?'🏆 ':''}${s.name}</div>
+            <div class="stat-bar-shoe-meta">${s.count} run${s.count!==1?'s':''} · ${fmtDateRange(s.firstDate, s.lastDate)}</div>
+          </div>
           <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(s.ae/maxAE*100).toFixed(1)}%"></div></div>
           <div class="stat-bar-val">${fmtAE(s.ae)}</div>
         </div>`).join('');

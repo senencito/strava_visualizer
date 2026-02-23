@@ -260,7 +260,8 @@ async function findRaceMatches(athleteId) {
     ORDER BY re.event_date DESC
   `, [athleteId]);
 
-  return rows.filter(r => parseInt(r.already_claimed) === 0);
+  // Return all matches; client uses already_claimed to decide what to show as suggestions
+  return rows;
 }
 
 module.exports = { syncActivities, getStreams, stravaFetch, refreshTokenIfNeeded, findRaceMatches };

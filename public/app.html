@@ -589,8 +589,11 @@ function setDist(btn) {
   // Check for race matches on load too
   fetch('/api/race-matches').then(r=>r.json()).then(m=>{
     S.raceMatches = Array.isArray(m) ? m : [];
+    // All matched activities (claimed + unclaimed) get the medal / Race DB filter
     S.raceMatchedIds = new Set(S.raceMatches.map(m => String(m.activity_id)));
-    if(S.raceMatches.length) showRaceMatches(S.raceMatches);
+    // Only show unclaimed ones in the suggestion banner
+    const unclaimed = S.raceMatches.filter(m => parseInt(m.already_claimed) === 0);
+    if(unclaimed.length) showRaceMatches(unclaimed);
   }).catch(()=>{});
 }
 // Filter state

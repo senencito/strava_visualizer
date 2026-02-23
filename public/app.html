@@ -1688,51 +1688,57 @@ function renderAnalytics() {
     compRow('vs 3-month avg', spThis, sp3mo, fmtSpeed) +
     compRow('vs 12-month avg', spThis, spYear, fmtSpeed);
 
-  // ── Shoe breakdown (AE by shoe) ────────────────────────────────────────────
-  const shoeId = document.getElementById('af-shoe').value;
+  // ── Shoe breakdown — always shown, all runs unfiltered by date/distance/shoe
   const shoesCard = document.getElementById('ac-shoes-card');
   const shoesBars = document.getElementById('ac-shoes-bars');
 
-  if (shoeId === 'all') {
-    const byShoe = new Map();
-    acts.forEach(a => {
-      if (!a.gear_name) return;
-      const key = a.gear_name;
-      if (!byShoe.has(key)) byShoe.set(key, { aes: [], count: 0, dates: [] });
-      const entry = byShoe.get(key);
-      entry.count++;
-      if (a.start_date_local) entry.dates.push(new Date(a.start_date_local));
-      if (a.average_speed && a.average_heartrate)
-        entry.aes.push(a.average_speed / a.average_heartrate * 1000);
-    });
-    if (byShoe.size > 1) {
-      shoesCard.style.display = 'block';
-      const scored = [...byShoe.entries()]
-        .map(([name, data]) => {
-          const sortedDates = data.dates.sort((a,b) => a-b);
-          return {
-            name,
-            ae:        avg(data.aes),
-            count:     data.count,
-            firstDate: sortedDates[0],
-            lastDate:  sortedDates[sortedDates.length - 1],
-          };
-        })
-        .filter(x => x.ae)
-        .sort((a,b) => b.ae - a.ae);
-      const maxAE = scored[0]?.ae || 1;
-      shoesBars.innerHTML = scored.map((s,i) => `
-        <div class="stat-bar-shoe-row">
-          <div class="stat-bar-shoe-col">
-            <div class="stat-bar-shoe-name" title="${s.name}">${i===0?'🏆 ':''}${s.name}</div>
-            <div class="stat-bar-shoe-meta">${s.count} run${s.count!==1?'s':''} · ${fmtDateRange(s.firstDate, s.lastDate)}</div>
-          </div>
-          <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(s.ae/maxAE*100).toFixed(1)}%"></div></div>
-          <div class="stat-bar-val">${fmtAE(s.ae)}</div>
-        </div>`).join('');
-    } else {
-      shoesCard.style.display = 'none';
-    }
+  const allRuns = S.activities.filter(a =>
+    ['Run','VirtualRun','TrailRun'].includes(a.type||'') ||
+    (a.sport_type||'').toLowerCase().includes('run')
+  );
+
+  const byShoe = new Map();
+  allRuns.forEach(a => {
+    if (!a.gear_name) return;
+    if (!byShoe.has(a.gear_name)) byShoe.set(a.gear_name, { aes: [], paces: [], count: 0, dates: [] });
+    const entry = byShoe.get(a.gear_name);
+    entry.count++;
+    if (a.start_date_local) entry.dates.push(new Date(a.start_date_local));
+    if (a.average_speed && a.average_heartrate)
+      entry.aes.push(a.average_speed / a.average_heartrate * 1000);
+    if (a.average_speed)
+      entry.paces.push(a.average_speed);
+  });
+
+  if (byShoe.size > 1) {
+    shoesCard.style.display = 'block';
+    const scored = [...byShoe.entries()]
+      .map(([name, data]) => {
+        const sortedDates = data.dates.sort((a,b) => a-b);
+        return {
+          name,
+          ae:        avg(data.aes),
+          avgPace:   avg(data.paces),
+          count:     data.count,
+          firstDate: sortedDates[0],
+          lastDate:  sortedDates[sortedDates.length - 1],
+        };
+      })
+      .filter(x => x.ae)
+      .sort((a,b) => b.ae - a.ae);
+    const maxAE = scored[0]?.ae || 1;
+    shoesBars.innerHTML = scored.map((s,i) => `
+      <div class="stat-bar-shoe-row">
+        <div class="stat-bar-shoe-col">
+          <div class="stat-bar-shoe-name" title="${s.name}">${i===0?'🏆 ':''}${s.name}</div>
+          <div class="stat-bar-shoe-meta">${s.count} run${s.count!==1?'s':''} · ${s.firstDate && s.lastDate ? fmtDateRange(s.firstDate, s.lastDate) : '—'}</div>
+        </div>
+        <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(s.ae/maxAE*100).toFixed(1)}%"></div></div>
+        <div class="stat-bar-val" style="min-width:90px;text-align:right">
+          <span style="font-size:10px;color:var(--ink-muted)">${fmtPaceFromMs(s.avgPace)}/mi</span>
+          &nbsp;${fmtAE(s.ae)}
+        </div>
+      </div>`).join('');
   } else {
     shoesCard.style.display = 'none';
   }

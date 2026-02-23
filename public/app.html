@@ -479,6 +479,17 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
       <option value="all">All shoes</option>
     </select>
   </div>
+  <div class="trend-tab-row" style="flex-direction:column;gap:6px;padding:8px 0 4px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-family:var(--mono);font-size:10px;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.06em">Date Range</span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--ink)" id="trend-date-label"></span>
+    </div>
+    <div class="date-slider-track" id="trend-date-track">
+      <div class="date-slider-fill" id="trend-date-fill"></div>
+      <div class="date-slider-thumb" id="trend-thumb-lo"></div>
+      <div class="date-slider-thumb" id="trend-thumb-hi"></div>
+    </div>
+  </div>
   <div class="chart-card">
     <div class="chart-title">Aerobic Efficiency Trend</div>
     <svg id="trend-svg" style="width:100%;height:260px"></svg>
@@ -624,7 +635,8 @@ function populateShoeFilterBar() {
 }
 
 // ── Date range slider ────────────────────────────────────────────────────────
-let DS = { minMs: 0, maxMs: 0, loMs: 0, hiMs: 0, dragging: null };
+let DS  = { minMs: 0, maxMs: 0, loMs: 0, hiMs: 0, dragging: null };
+let TDS = { minMs: 0, maxMs: 0, loMs: 0, hiMs: 0, dragging: null };
 
 function initDateSlider() {
   const dates = S.activities.map(a => new Date(a.start_date_local).getTime()).filter(Boolean);
@@ -675,6 +687,60 @@ function bindSliderDrag() {
       filterAndRenderList();
     });
     thumb.addEventListener('pointerup', () => { DS.dragging = null; });
+  });
+}
+
+// ── Trend screen date slider ──────────────────────────────────────────────────
+function initTrendSlider() {
+  const runs = S.activities.filter(a =>
+    ['Run','VirtualRun','TrailRun'].includes(a.type||'') ||
+    (a.sport_type||'').toLowerCase().includes('run')
+  );
+  const dates = runs.map(a => new Date(a.start_date_local).getTime()).filter(Boolean);
+  if (!dates.length) return;
+  TDS.minMs = Math.min(...dates);
+  TDS.maxMs = Math.max(...dates);
+  TDS.loMs  = TDS.minMs;
+  TDS.hiMs  = TDS.maxMs;
+  updateTrendSliderUI();
+  bindTrendSliderDrag();
+}
+
+function updateTrendSliderUI() {
+  const track = document.getElementById('trend-date-track');
+  if (!track) return;
+  const range = TDS.maxMs - TDS.minMs || 1;
+  const loPct = (TDS.loMs - TDS.minMs) / range * 100;
+  const hiPct = (TDS.hiMs - TDS.minMs) / range * 100;
+  document.getElementById('trend-date-fill').style.left  = loPct + '%';
+  document.getElementById('trend-date-fill').style.width = (hiPct - loPct) + '%';
+  document.getElementById('trend-thumb-lo').style.left = loPct + '%';
+  document.getElementById('trend-thumb-hi').style.left = hiPct + '%';
+  document.getElementById('trend-date-label').textContent =
+    msToLabel(TDS.loMs) + ' – ' + msToLabel(TDS.hiMs);
+}
+
+function bindTrendSliderDrag() {
+  ['lo','hi'].forEach(which => {
+    const thumb = document.getElementById('trend-thumb-'+which);
+    if (!thumb) return;
+    thumb.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      TDS.dragging = which;
+      thumb.setPointerCapture(e.pointerId);
+    });
+    thumb.addEventListener('pointermove', e => {
+      if (TDS.dragging !== which) return;
+      const track = document.getElementById('trend-date-track');
+      const rect  = track.getBoundingClientRect();
+      let pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const ms = TDS.minMs + pct * (TDS.maxMs - TDS.minMs);
+      if (which === 'lo') TDS.loMs = Math.min(ms, TDS.hiMs - 86400000);
+      else                TDS.hiMs = Math.max(ms, TDS.loMs + 86400000);
+      updateTrendSliderUI();
+      drawTrend();
+    });
+    thumb.addEventListener('pointerup', () => { TDS.dragging = null; });
   });
 }
 
@@ -2000,6 +2066,7 @@ function setTrendDist(btn){
 
 function showTrend(){
   showScreen('trend');
+  initTrendSlider();
   drawTrend();
 }
 
@@ -2026,7 +2093,9 @@ function drawTrend(){
     const isRun=['Run','VirtualRun','TrailRun'].includes(a.type)||(a.sport_type||'').toLowerCase().includes('run');
     const distOk = a.distance>=trendDistMin && a.distance<=trendDistMax;
     const shoeOk = selectedShoe==='all' || a.gear_id===selectedShoe;
-    return isRun && distOk && shoeOk && a.has_heartrate && a.average_heartrate && a.average_speed;
+    const t = new Date(a.start_date_local).getTime();
+    const dateOk = !TDS.minMs || (t >= TDS.loMs && t <= TDS.hiMs + 86400000);
+    return isRun && distOk && shoeOk && dateOk && a.has_heartrate && a.average_heartrate && a.average_speed;
   }).sort((a,b)=>new Date(a.start_date_local)-new Date(b.start_date_local));
 
   const list=document.getElementById('trend-list');

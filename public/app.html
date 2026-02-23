@@ -982,6 +982,7 @@ async function fetchActivities() {
       average_speed:    a.avg_speed_ms,
       gear_id:          a.gear_id,
       gear_name:        a.gear_name,
+      gear_retired:     a.gear_retired || false,
       temp_c:           a.temp_c,
       humidity_pct:     a.humidity_pct,
       sport_type:       a.sport_type,
@@ -1766,18 +1767,24 @@ function renderAnalytics() {
   const byShoe = new Map();
   allRuns.forEach(a => {
     if (!a.gear_name) return;
-    if (!byShoe.has(a.gear_name)) byShoe.set(a.gear_name, { aes: [], paces: [], count: 0, dates: [] });
+    if (!byShoe.has(a.gear_name)) byShoe.set(a.gear_name, {
+      aes: [], paces: [], count: 0, dates: [], miles: 0, retired: a.gear_retired || false
+    });
     const entry = byShoe.get(a.gear_name);
     entry.count++;
+    entry.miles += (a.distance || 0) / 1609.34;
     if (a.start_date_local) entry.dates.push(new Date(a.start_date_local));
     if (a.average_speed && a.average_heartrate)
       entry.aes.push(a.average_speed / a.average_heartrate * 1000);
     if (a.average_speed)
       entry.paces.push(a.average_speed);
+    // Sync retired flag — any activity update can propagate it
+    if (a.gear_retired) entry.retired = true;
   });
 
   if (byShoe.size > 1) {
     shoesCard.style.display = 'block';
+
     const scored = [...byShoe.entries()]
       .map(([name, data]) => {
         const sortedDates = data.dates.sort((a,b) => a-b);
@@ -1786,25 +1793,47 @@ function renderAnalytics() {
           ae:        avg(data.aes),
           avgPace:   avg(data.paces),
           count:     data.count,
+          miles:     data.miles,
+          retired:   data.retired,
           firstDate: sortedDates[0],
           lastDate:  sortedDates[sortedDates.length - 1],
         };
       })
       .filter(x => x.ae)
       .sort((a,b) => b.ae - a.ae);
-    const maxAE = scored[0]?.ae || 1;
-    shoesBars.innerHTML = scored.map((s,i) => `
-      <div class="stat-bar-shoe-row">
-        <div class="stat-bar-shoe-col">
-          <div class="stat-bar-shoe-name" title="${s.name}">${i===0?'🏆 ':''}${s.name}</div>
-          <div class="stat-bar-shoe-meta">${s.count} run${s.count!==1?'s':''} · ${s.firstDate && s.lastDate ? fmtDateRange(s.firstDate, s.lastDate) : '—'}</div>
-        </div>
-        <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(s.ae/maxAE*100).toFixed(1)}%"></div></div>
-        <div class="stat-bar-val" style="min-width:90px;text-align:right">
-          <span style="font-size:10px;color:var(--ink-muted)">${fmtPaceFromMs(s.avgPace)}/mi</span>
-          &nbsp;${fmtAE(s.ae)}
-        </div>
-      </div>`).join('');
+
+    const active  = scored.filter(s => !s.retired);
+    const retired = scored.filter(s => s.retired);
+
+    function shoeRows(list, globalBestAE) {
+      const maxAE = globalBestAE || list[0]?.ae || 1;
+      return list.map((s, i) => {
+        const isBest = s.ae === scored[0].ae;
+        return `
+        <div class="stat-bar-shoe-row">
+          <div class="stat-bar-shoe-col">
+            <div class="stat-bar-shoe-name" title="${s.name}">${isBest ? '🏆 ' : ''}${s.name}</div>
+            <div class="stat-bar-shoe-meta">${s.count} run${s.count!==1?'s':''} · ${s.miles.toFixed(0)} mi · ${s.firstDate && s.lastDate ? fmtDateRange(s.firstDate, s.lastDate) : '—'}</div>
+          </div>
+          <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${(s.ae/maxAE*100).toFixed(1)}%"></div></div>
+          <div class="stat-bar-val" style="min-width:90px;text-align:right">
+            <span style="font-size:10px;color:var(--ink-muted)">${fmtPaceFromMs(s.avgPace)}/mi</span>
+            &nbsp;${fmtAE(s.ae)}
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    const globalMaxAE = scored[0]?.ae || 1;
+    let html = '';
+    if (active.length) {
+      html += shoeRows(active, globalMaxAE);
+    }
+    if (retired.length) {
+      html += `<div style="font-family:var(--mono);font-size:10px;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 6px;padding-top:10px;border-top:1px solid var(--grid)">Retired</div>`;
+      html += shoeRows(retired, globalMaxAE);
+    }
+    shoesBars.innerHTML = html;
   } else {
     shoesCard.style.display = 'none';
   }

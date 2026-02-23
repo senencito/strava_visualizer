@@ -173,17 +173,14 @@ async function syncActivities(athlete) {
 // ── Gear upsert ───────────────────────────────────────────────────────────────
 
 async function upsertGear(athlete, gearId) {
-  // Check cache first
-  const existing = await queryOne(`SELECT id FROM gear WHERE strava_id=$1`, [gearId]);
-  if (existing) return;
-
   try {
     const g = await stravaFetch(athlete, `/gear/${gearId}`);
     await query(`
-      INSERT INTO gear (strava_id, athlete_id, name, brand_name, model_name, distance_m)
-      VALUES ($1,$2,$3,$4,$5,$6)
-      ON CONFLICT (strava_id) DO UPDATE SET name=EXCLUDED.name
-    `, [g.id, athlete.strava_id, g.name, g.brand_name, g.model_name, g.distance]);
+      INSERT INTO gear (strava_id, athlete_id, name, brand_name, model_name, distance_m, retired)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      ON CONFLICT (strava_id) DO UPDATE SET
+        name=EXCLUDED.name, retired=EXCLUDED.retired, distance_m=EXCLUDED.distance_m
+    `, [g.id, athlete.strava_id, g.name, g.brand_name, g.model_name, g.distance, g.retired || false]);
   } catch (e) {
     console.warn(`Could not fetch gear ${gearId}:`, e.message);
   }

@@ -231,6 +231,7 @@ app.get('/api/activities', requireAuth, async (req, res) => {
       a.gear_id,
       g.name        AS gear_name,
       g.brand_name  AS gear_brand,
+      g.retired     AS gear_retired,
       a.temp_c,
       a.humidity_pct,
       a.sport_type

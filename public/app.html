@@ -1635,7 +1635,7 @@ function compRow(label, val, refVal, formatter, lowerBetter=false) {
   if (val == null) return `<div class="stat-comp-row"><span class="stat-comp-label">${label}</span><span class="stat-comp-val no-data-msg">No data</span></div>`;
   return `<div class="stat-comp-row">
     <span class="stat-comp-label">${label}</span>
-    <span class="stat-comp-val">${formatter(val)} ${refVal != null ? deltaHtml(val, refVal, lowerBetter) : ''}</span>
+    <span class="stat-comp-val">${refVal != null ? formatter(refVal) : '—'} ${refVal != null ? deltaHtml(val, refVal, lowerBetter) : ''}</span>
   </div>`;
 }
 

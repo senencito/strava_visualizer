@@ -10,6 +10,7 @@ const { pool, query, queryOne, initDB } = require('../db/client');
 const { syncActivities, getStreams, stravaFetch, findRaceMatches } = require('./strava');
 const { importRace, lookupBib, fmtTime } = require('./sporthive');
 const { importRaceResult, parseRaceResultUrl } = require('./raceresult');
+const { importRaceRecordCom, parseRaceRecordComUrl } = require('./racerecord-com');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -279,7 +280,9 @@ app.post('/api/admin/import-race', requireAdmin, async (req, res) => {
   try {
     // Route to the correct importer based on URL
     let result;
-    if (url.includes('raceresult.com')) {
+    if (url.includes('racerecord.com')) {
+      result = await importRaceRecordCom({ url, eventName: event_name, raceName: race_name, eventDate: event_date, distanceM: distance_m, location, replace });
+    } else if (url.includes('raceresult.com')) {
       result = await importRaceResult({ url, eventName: event_name, raceName: race_name, eventDate: event_date, distanceM: distance_m, location, replace, listname });
     } else {
       result = await importRace({ url, eventName: event_name, raceName: race_name, eventDate: event_date, distanceM: distance_m, location, replace, raceId: race_id });

@@ -90,12 +90,9 @@ function parseTime(t) {
 
 // ── Parse finisher rows from the "Time" tab in the leaderboard HTML ───────────
 // Returns [{ bib, name, gender, overallRank, chipTimeSec }]
-function parseFinishers(html, divisionCode = null) {
-  // The active tab-pane contains the finish times. Its div has class including "active".
-  // Pattern: <div class='tab-pane fade show  active' id='pills-NNNNN' role='tabpanel'
-  const activeTabRe = /id='(pills-\d+)'\s+role='tabpanel'[^>]*class='[^']*active[^']*'|class='tab-pane[^']*active[^']*'\s+id='(pills-\d+)'/;
-  // Simpler: just find the tab-pane div that contains "active"
-  // Strategy: find the last occurrence of tab-pane with "active" in class
+function parseFinishers(html) {
+  // Find the active tab-pane div (the "Time"/finish tab) by locating the pane
+  // that has "active" in its class attribute.
   let tableHtml = html;
   const allPanes = [...html.matchAll(/id='(pills-\d+)'\s+role='tabpanel'/g)];
   // Find the one with active class nearby
@@ -182,7 +179,7 @@ async function importRaceRecordCom({ url, eventName, raceName, eventDate, distan
   const byBib = new Map();
 
   // Overall top-finishers (sets overallRank for top runners)
-  const mainFinishers = parseFinishers(mainHtml, null);
+  const mainFinishers = parseFinishers(mainHtml);
   mainFinishers.forEach(f => byBib.set(f.bib, { ...f, ageGroup: null, ageGroupRank: null }));
   console.log(`  Main page: ${mainFinishers.length} finishers`);
 
@@ -191,7 +188,7 @@ async function importRaceRecordCom({ url, eventName, raceName, eventDate, distan
     await sleep(DELAY_MS);
     try {
       const html        = await fetchLeaderboard(raceId, div);
-      const divFinishers = parseFinishers(html, div);
+      const divFinishers = parseFinishers(html);
       let added = 0;
       divFinishers.forEach((f, idx) => {
         const existing = byBib.get(f.bib);
@@ -215,7 +212,7 @@ async function importRaceRecordCom({ url, eventName, raceName, eventDate, distan
   console.log(`  Total unique finishers: ${finishers.length}`);
 
   // 4. Upsert race_event
-  const { rows: [raceEvent] } = await query(`
+  const [raceEvent] = await query(`
     INSERT INTO race_events
       (sporthive_event_id, sporthive_race_id, event_name, race_name,
        event_date, distance_m, location, total_finishers)

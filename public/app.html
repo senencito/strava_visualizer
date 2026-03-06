@@ -227,7 +227,8 @@ svg { display: block; overflow: visible; }
 #viz-screen.sbs-active .controls-card { display:none !important; }
 #viz-screen.sbs-active #sbs-view { display:block !important; }
 .sbs-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:12px; }
-.sbs-card { background:var(--surface); border-radius:16px; padding:16px 18px 14px; box-shadow:0 1px 3px rgba(0,0,0,.05),0 4px 16px rgba(0,0,0,.04); }
+.sbs-card { background:var(--surface); border-radius:16px; padding:16px 18px 14px; box-shadow:0 1px 3px rgba(0,0,0,.05),0 4px 16px rgba(0,0,0,.04); animation:sbsCardIn 0.35s ease both; }
+@keyframes sbsCardIn { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
 .sbs-card-header { display:flex; align-items:flex-start; gap:8px; margin-bottom:10px; }
 .sbs-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; margin-top:2px; }
 .sbs-card-name { font-family:var(--mono); font-size:11px; font-weight:500; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -713,7 +714,7 @@ function drawSBS() {
   const H=170, PL=44, PR=10, PT=10, PB=22, W=400;
   const cw=W-PL-PR, ch=H-PT-PB;
 
-  const cards = visible.map(r => {
+  const cards = visible.map((r, idx) => {
     const maxD = r.dist_mi[r.n-1];
     const xS = d => PL + (d/maxD)*cw;
     // Pace is inverted (higher number = slower = top of chart)
@@ -751,6 +752,7 @@ function drawSBS() {
     }
     svg += '</svg>';
 
+    const aeVal = r.act.ae_score ? parseFloat(r.act.ae_score).toFixed(2) : (()=>{ const v=calcAE(r.act); return v||null; })();
     let stat = '';
     if (SBS.metric === 'pace' && r.pace) {
       const valid = r.pace.filter(p => p&&p<20);
@@ -765,9 +767,11 @@ function drawSBS() {
       for (let i=1; i<r.n; i++) { const d=r.alt_ft[i]-r.alt_ft[i-1]; if(d>0) gain+=d; }
       stat = `${Math.round(gain)} ft gain`;
     }
+    if (aeVal) stat = stat ? `${stat} · AE ${aeVal}` : `AE ${aeVal}`;
 
     const date = new Date(r.act.start_date_local).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-    return `<div class="sbs-card">
+    const delay = (idx * 0.06).toFixed(2);
+    return `<div class="sbs-card" style="animation-delay:${delay}s">
       <div class="sbs-card-header">
         <div class="sbs-dot" style="background:${r.color}"></div>
         <div>

@@ -215,6 +215,24 @@ svg { display: block; overflow: visible; }
     .dist-tabs { gap: 6px; }
   .dtab { padding: 7px 13px; font-size: 10px; }
 }
+/* Side-by-side view */
+.sbs-row { display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.sbs-btn { font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; padding:6px 14px; border-radius:100px; cursor:pointer; border:1.5px solid var(--grid); background:transparent; color:var(--ink-muted); transition:all .15s; }
+.sbs-btn.active { border-color:var(--ink); background:var(--ink); color:white; }
+.sbs-metric-btn { font-family:var(--mono); font-size:10px; padding:5px 12px; border-radius:100px; border:1.5px solid var(--grid); background:transparent; color:var(--ink-muted); cursor:pointer; transition:all .15s; }
+.sbs-metric-btn.active { border-color:var(--accent); color:var(--accent); }
+#viz-screen.sbs-active .chart-card,
+#viz-screen.sbs-active #ae-comparison,
+#viz-screen.sbs-active #crosshair-bar,
+#viz-screen.sbs-active .controls-card { display:none !important; }
+#viz-screen.sbs-active #sbs-view { display:block !important; }
+.sbs-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:12px; margin-bottom:12px; }
+.sbs-card { background:var(--surface); border-radius:16px; padding:16px 18px 14px; box-shadow:0 1px 3px rgba(0,0,0,.05),0 4px 16px rgba(0,0,0,.04); }
+.sbs-card-header { display:flex; align-items:flex-start; gap:8px; margin-bottom:10px; }
+.sbs-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; margin-top:2px; }
+.sbs-card-name { font-family:var(--mono); font-size:11px; font-weight:500; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sbs-card-date { font-family:var(--mono); font-size:9px; color:var(--ink-muted); margin-top:2px; }
+.sbs-card-stat { font-family:var(--mono); font-size:10px; color:var(--ink-muted); margin-top:8px; }
 .ctrl-btn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 9px 20px; border-radius: 100px; cursor: pointer; border: 1.5px solid var(--ink); background: var(--ink); color: white; transition: opacity 0.15s; min-width: 76px; text-align: center; }
 .ctrl-btn:hover { opacity: 0.8; }
 .ctrl-btn.outline { background: transparent; color: var(--ink); }
@@ -412,6 +430,15 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
     </div>
   </div>
   <div class="race-legend" id="legend"></div>
+  <div class="sbs-row" id="sbs-row" style="display:none">
+    <button class="sbs-btn" id="sbs-toggle" onclick="toggleSBS()">⊞ Side by Side</button>
+    <span id="sbs-metrics" style="display:none;gap:6px" class="sbs-row" style="margin:0">
+      <button class="sbs-metric-btn active" onclick="setSBSMetric(this,'pace')">Pace</button>
+      <button class="sbs-metric-btn" onclick="setSBSMetric(this,'hr')">Heart Rate</button>
+      <button class="sbs-metric-btn" onclick="setSBSMetric(this,'elev')">Elevation</button>
+    </span>
+  </div>
+  <div id="sbs-view" style="display:none"></div>
   <div id="crosshair-bar" style="display:none;background:var(--surface);border:1px solid var(--grid);border-radius:12px;padding:10px 16px;margin-bottom:10px;display:none;flex-wrap:wrap;gap:8px 20px;align-items:center;">
     <span id="xh-dist" style="font-family:var(--mono);font-size:10px;color:var(--ink-muted);margin-right:4px"></span>
     <div id="xh-rows" style="display:flex;flex-wrap:wrap;gap:6px 18px"></div>
@@ -635,6 +662,125 @@ function populateShoeFilterBar() {
     opt.value = s; opt.textContent = s;
     sel.appendChild(opt);
   });
+}
+
+// ── Side-by-side view ────────────────────────────────────────────────────────
+const SBS = { active: false, metric: 'pace' };
+
+function toggleSBS() {
+  SBS.active = !SBS.active;
+  const btn = document.getElementById('sbs-toggle');
+  btn.classList.toggle('active', SBS.active);
+  btn.textContent = SBS.active ? '≡ Normal View' : '⊞ Side by Side';
+  const metricsEl = document.getElementById('sbs-metrics');
+  metricsEl.style.display = SBS.active ? 'flex' : 'none';
+  document.getElementById('viz-screen').classList.toggle('sbs-active', SBS.active);
+  if (SBS.active) drawSBS();
+}
+
+function setSBSMetric(btn, metric) {
+  SBS.metric = metric;
+  document.querySelectorAll('.sbs-metric-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  drawSBS();
+}
+
+function drawSBS() {
+  const container = document.getElementById('sbs-view');
+  if (!container) return;
+  const visible = S.races.filter(r => !r.hidden).slice(0, 3);
+  if (!visible.length) { container.innerHTML = ''; return; }
+
+  // Shared Y-axis scale across all visible races (for fair comparison)
+  let yMn, yMx;
+  if (SBS.metric === 'pace') {
+    yMn = Infinity; yMx = -Infinity;
+    visible.forEach(r => { if(r.pace) r.pace.forEach(p => { if(p&&p<20){if(p<yMn)yMn=p;if(p>yMx)yMx=p;}}); });
+    if (!isFinite(yMn)) { yMn=6; yMx=12; }
+    yMn = Math.max(yMn-0.5, 0); yMx = yMx+0.5;
+  } else if (SBS.metric === 'hr') {
+    yMn = Infinity; yMx = -Infinity;
+    visible.forEach(r => { if(r.hr) r.hr.forEach(v => { if(v&&v>0){if(v<yMn)yMn=v;if(v>yMx)yMx=v;}}); });
+    if (!isFinite(yMn)) { yMn=120; yMx=200; }
+    yMn -= 5; yMx += 5;
+  } else {
+    yMn = Infinity; yMx = -Infinity;
+    visible.forEach(r => { if(r.alt_ft) r.alt_ft.forEach(a => {if(a<yMn)yMn=a;if(a>yMx)yMx=a;}); });
+    if (!isFinite(yMn)) { yMn=0; yMx=100; }
+    const pad = (yMx-yMn)*0.1||10; yMn -= pad; yMx += pad;
+  }
+
+  const H=170, PL=44, PR=10, PT=10, PB=22, W=400;
+  const cw=W-PL-PR, ch=H-PT-PB;
+
+  const cards = visible.map(r => {
+    const maxD = r.dist_mi[r.n-1];
+    const xS = d => PL + (d/maxD)*cw;
+    // Pace is inverted (higher number = slower = top of chart)
+    const yS = SBS.metric === 'pace'
+      ? p => PT + ((p-yMn)/(yMx-yMn))*ch
+      : v => PT+ch - ((v-yMn)/(yMx-yMn))*ch;
+
+    let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">`;
+    niceTicks(yMn, yMx, 4).forEach(v => {
+      const y = yS(v);
+      svg += `<line class="grid-line" x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}"/>`;
+      const lbl = SBS.metric==='pace' ? fmtPace(v) : SBS.metric==='hr' ? Math.round(v) : Math.round(v)+'ft';
+      svg += `<text class="axis-text" x="${PL-4}" y="${y+3}" text-anchor="end">${lbl}</text>`;
+    });
+    mileTicks(maxD).forEach(m => {
+      svg += `<text class="axis-text" x="${xS(m)}" y="${H-4}" text-anchor="middle">${m}</text>`;
+    });
+
+    const xs = r.dist_mi.map(xS);
+    let ys = null;
+    if      (SBS.metric === 'pace') ys = r.pace   ? r.pace.map(p   => (p&&p<20) ? yS(p)   : null) : null;
+    else if (SBS.metric === 'hr')   ys = r.hr     ? r.hr.map(v     => (v&&v>0)  ? yS(v)   : null) : null;
+    else                            ys = r.alt_ft ? r.alt_ft.map(a =>              yS(a))          : null;
+
+    if (ys) {
+      if (SBS.metric === 'elev') {
+        let area = `M${xs[0].toFixed(1)},${H-PB}`;
+        for (let i=0; i<r.n; i++) area += ` L${xs[i].toFixed(1)},${ys[i].toFixed(1)}`;
+        area += ` L${xs[r.n-1].toFixed(1)},${H-PB} Z`;
+        svg += `<path d="${area}" fill="${r.color}" opacity="0.15"/>`;
+      }
+      svg += `<path d="${mkPath(xs,ys)}" fill="none" stroke="${r.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    } else {
+      svg += `<text x="${W/2}" y="${H/2}" text-anchor="middle" class="axis-text">No data</text>`;
+    }
+    svg += '</svg>';
+
+    let stat = '';
+    if (SBS.metric === 'pace' && r.pace) {
+      const valid = r.pace.filter(p => p&&p<20);
+      const a = valid.length ? valid.reduce((a,b)=>a+b,0)/valid.length : null;
+      if (a) stat = `avg ${fmtPace(a)}/mi`;
+    } else if (SBS.metric === 'hr' && r.hr) {
+      const valid = r.hr.filter(v => v&&v>0);
+      const a = valid.length ? Math.round(valid.reduce((a,b)=>a+b,0)/valid.length) : null;
+      if (a) stat = `avg ${a} bpm`;
+    } else if (SBS.metric === 'elev' && r.alt_ft) {
+      let gain = 0;
+      for (let i=1; i<r.n; i++) { const d=r.alt_ft[i]-r.alt_ft[i-1]; if(d>0) gain+=d; }
+      stat = `${Math.round(gain)} ft gain`;
+    }
+
+    const date = new Date(r.act.start_date_local).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    return `<div class="sbs-card">
+      <div class="sbs-card-header">
+        <div class="sbs-dot" style="background:${r.color}"></div>
+        <div>
+          <div class="sbs-card-name" title="${r.act.name}">${r.act.name}</div>
+          <div class="sbs-card-date">${date} · ${maxD.toFixed(1)} mi</div>
+        </div>
+      </div>
+      ${svg}
+      ${stat ? `<div class="sbs-card-stat">${stat}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  container.innerHTML = `<div class="sbs-grid">${cards}</div>`;
 }
 
 // ── Date range slider ────────────────────────────────────────────────────────
@@ -1213,6 +1359,8 @@ function initViz() {
       drawCharts(); attachHover(); renderProgress(S.progress); if(document.getElementById('trend-screen').style.display!=='none') drawTrend();
     });
   });
+  // Show SBS toggle only when 2+ races are loaded
+  document.getElementById('sbs-row').style.display = S.races.length >= 2 ? 'flex' : 'none';
   // Show HR card if any race has HR data
   document.getElementById('hr-card').style.display = S.races.some(r=>r.hr) ? '' : 'none';
   const hasAEData = S.races.some(r=>r.ae);
@@ -1253,7 +1401,7 @@ function mkPath(xs,ys){
   return d;
 }
 
-function drawCharts(){ drawElev(); drawPace(); drawHR(); drawAE(); }
+function drawCharts(){ drawElev(); drawPace(); drawHR(); drawAE(); if(SBS.active) drawSBS(); }
 
 function drawElev(){
   const W=svgW('esvg'), H=148, PL=46,PR=12,PT=8,PB=24;

@@ -226,7 +226,7 @@ svg { display: block; overflow: visible; }
 #viz-screen.sbs-active #crosshair-bar,
 #viz-screen.sbs-active .controls-card { display:none !important; }
 #viz-screen.sbs-active #sbs-view { display:block !important; }
-.sbs-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:12px; margin-bottom:12px; }
+.sbs-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; margin-bottom:12px; }
 .sbs-card { background:var(--surface); border-radius:16px; padding:16px 18px 14px; box-shadow:0 1px 3px rgba(0,0,0,.05),0 4px 16px rgba(0,0,0,.04); }
 .sbs-card-header { display:flex; align-items:flex-start; gap:8px; margin-bottom:10px; }
 .sbs-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; margin-top:2px; }
@@ -583,7 +583,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
 <div id="dbg"></div>
 
 <script>
-const COLORS = ['#16a34a','#2563eb','#fc4c02','#9333ea','#d97706','#0891b2'];
+const COLORS = ['#16a34a','#2563eb','#fc4c02','#9333ea','#d97706','#0891b2','#db2777','#0d9488','#b45309','#4f46e5','#65a30d','#dc2626'];
 
 const S = {
   accessToken:'', activities:[], selectedIds: new Set(),
@@ -688,7 +688,7 @@ function setSBSMetric(btn, metric) {
 function drawSBS() {
   const container = document.getElementById('sbs-view');
   if (!container) return;
-  const visible = S.races.filter(r => !r.hidden).slice(0, 3);
+  const visible = S.races.filter(r => !r.hidden).slice(0, 12);
   if (!visible.length) { container.innerHTML = ''; return; }
 
   // Shared Y-axis scale across all visible races (for fair comparison)
